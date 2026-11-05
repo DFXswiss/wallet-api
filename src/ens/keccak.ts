@@ -101,7 +101,24 @@ export function keccak256(input: Uint8Array): Buffer {
 
 export function namehash(name: string): string {
   let node: Buffer = Buffer.alloc(32);
-  for (const label of name.toLowerCase().split('.').filter(Boolean).reverse()) {
+  if (name.length === 0) {
+    return node.toString('hex');
+  }
+  const labels: string[] = [];
+  let rest = name.toLowerCase();
+  while (rest.length > 0) {
+    const dot = rest.indexOf('.');
+    if (dot === -1) {
+      labels.push(rest);
+      break;
+    }
+    labels.push(rest.slice(0, dot));
+    rest = rest.slice(dot + 1);
+    if (rest.length === 0) {
+      break;
+    }
+  }
+  for (const label of labels.reverse()) {
     const labelHash = keccak256(Buffer.from(label, 'utf8'));
     node = Buffer.from(keccak256(Buffer.concat([node, labelHash])));
   }

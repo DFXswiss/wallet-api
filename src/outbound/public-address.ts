@@ -25,7 +25,7 @@ function isPublicIpv4(address: string): boolean {
   if (a === 198 && (b === 18 || b === 19)) return false;
   if (a === 198 && b === 51 && c === 100) return false;
   if (a === 203 && b === 0 && c === 113) return false;
-  if (a === 224 || a >= 240) return false;
+  if (a >= 224) return false;
   return true;
 }
 
@@ -83,7 +83,10 @@ function isPublicIpv6(address: string): boolean {
   if (words[0] === 0x2001 && words[1] === 0x0db8) return false;
   if (words[0] === 0x2001 && words[1] === 0x0002) return false;
   if (words[0] === 0x2001 && words[1] === 0x0010) return false;
+  if (words[0] === 0x2001 && words[1] === 0) return false;
+  if (words[0] === 0x2002) return false;
   if (words[0] === 0x0064 && words[1] === 0xff9b && words[2] === 0 && words[3] === 0) return false;
+  if (words[0] === 0x0064 && words[1] === 0xff9b && words[2] === 0x0001) return false;
   if (words[0] === 0x0100 && words[1] === 0 && words[2] === 0 && words[3] === 0) return false;
   if (words.slice(0, 5).every((word) => word === 0) && words[5] === 0xffff) {
     return isPublicIpv4(`${words[6] >> 8}.${words[6] & 255}.${words[7] >> 8}.${words[7] & 255}`);

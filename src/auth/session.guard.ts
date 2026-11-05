@@ -1,7 +1,7 @@
 import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { Request } from 'express';
 import { walletError } from '../common/wallet-error';
-import { SessionService } from './session.service';
+import { SessionAccountService } from './session-account.service';
 
 export type AuthenticatedRequest = Request & { walletAccountId?: string };
 
@@ -19,7 +19,7 @@ export function readBearerToken(request: Request): string | undefined {
 
 @Injectable()
 export class SessionGuard implements CanActivate {
-  constructor(private readonly sessions: SessionService) {}
+  constructor(private readonly accounts: SessionAccountService) {}
 
   async canActivate(context: ExecutionContext): Promise<true> {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
@@ -27,8 +27,7 @@ export class SessionGuard implements CanActivate {
     if (!token) {
       throw walletError(401, 'SessionRequired');
     }
-    const claims = await this.sessions.verify(token);
-    request.walletAccountId = claims.sub;
+    request.walletAccountId = await this.accounts.requireAccountId(token);
     return true;
   }
 }

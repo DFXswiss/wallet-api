@@ -1,4 +1,4 @@
-import { CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
 
 @Entity('wallet_account')
 export class WalletAccount {
@@ -10,4 +10,7 @@ export class WalletAccount {
 
   @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
   updatedAt: Date;
+
+  @Column({ name: 'session_valid_after', type: 'timestamptz', nullable: true })
+  sessionValidAfter: Date | null;
 }

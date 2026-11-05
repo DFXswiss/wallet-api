@@ -195,8 +195,28 @@ export class PasskeyService {
     if (!verified.verified) {
       throw walletError(400, 'ChallengeInvalid');
     }
-    await this.consumeChallenge(challenge.id);
-    return { token: this.sessions.issue(credential.walletAccountId), accountId: credential.walletAccountId };
+    return this.dataSource.transaction(async (manager) => {
+      const fresh = await manager
+        .createQueryBuilder(PasskeyCredential, 'credential')
+        .setLock('pessimistic_write')
+        .where('credential.id = :id', { id: credential.id })
+        .getOne();
+      if (!fresh || fresh.revokedAt) {
+        throw walletError(401, 'PasskeyCredentialRevoked');
+      }
+      const consume = await manager
+        .createQueryBuilder()
+        .update(PasskeyChallenge)
+        .set({ usedAt: new Date() })
+        .where('id = :id', { id: challenge.id })
+        .andWhere('used_at IS NULL')
+        .andWhere('expires_at > :now', { now: new Date() })
+        .execute();
+      if (!consume.affected) {
+        throw walletError(400, 'ChallengeInvalid');
+      }
+      return { token: this.sessions.issue(credential.walletAccountId), accountId: credential.walletAccountId };
+    });
   }
 
   async beginRevocation(walletAccountId: string): Promise<AuthenticateBeginResult> {
@@ -270,6 +290,10 @@ export class PasskeyService {
         throw walletError(400, 'ChallengeInvalid');
       }
       await manager.update(PasskeyCredential, { id: credential.id }, { revokedAt });
+      const account = await manager.update(WalletAccount, { id: walletAccountId }, { sessionValidAfter: revokedAt });
+      if (!account.affected) {
+        throw walletError(401, 'SessionInvalid');
+      }
     });
     return { revokedAt: revokedAt.toISOString() };
   }

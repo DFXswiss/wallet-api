@@ -99,6 +99,7 @@ export class SimpleWebAuthnVerifier implements WebAuthnVerifier {
     const credential = {
       id: input.credential.id,
       publicKey: Buffer.from(input.credential.publicKey, 'base64url'),
+      // Synced passkeys report 0. A stored counter would lock out the other device.
       counter: 0,
       transports: input.credential.transports as any,
     };

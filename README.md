@@ -41,7 +41,8 @@ Passkey relying party settings are strict:
 - `dev` and `loc` require a non-production RP id and an origin whose hostname is that RP id. HTTPS is required; `loc`
   may use HTTP.
 
-Session tokens are HMAC-signed JWTs with issuer `wallet-api`, audience `wallet`, and a 12-hour lifetime.
+Session tokens are HMAC-signed JWTs with issuer `wallet-api`, audience `wallet`, and a 12-hour lifetime. Revoking a
+credential invalidates tokens issued in that second or earlier.
 
 ## Database
 

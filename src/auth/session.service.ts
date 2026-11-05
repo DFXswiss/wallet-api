@@ -11,7 +11,18 @@ export type WalletSessionClaims = {
   sub: string;
   iss: string;
   aud: string;
+  iat: number;
 };
+
+export function sessionStillCurrent(iatSeconds: number, validAfter: Date | null): boolean {
+  if (!Number.isSafeInteger(iatSeconds) || iatSeconds < 0) {
+    return false;
+  }
+  if (!validAfter) {
+    return true;
+  }
+  return iatSeconds > Math.floor(validAfter.getTime() / 1000);
+}
 
 @Injectable()
 export class SessionService implements OnModuleInit {
@@ -51,7 +62,10 @@ export class SessionService implements OnModuleInit {
       if (typeof payload.sub !== 'string' || payload.sub.length === 0) {
         throw walletError(401, 'SessionInvalid');
       }
-      return { sub: payload.sub, iss: WALLET_SESSION_ISSUER, aud: WALLET_SESSION_AUDIENCE };
+      if (typeof payload.iat !== 'number' || !Number.isSafeInteger(payload.iat)) {
+        throw walletError(401, 'SessionInvalid');
+      }
+      return { sub: payload.sub, iss: WALLET_SESSION_ISSUER, aud: WALLET_SESSION_AUDIENCE, iat: payload.iat };
     } catch {
       throw walletError(401, 'SessionInvalid');
     }

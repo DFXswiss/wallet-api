@@ -8,6 +8,7 @@ export class WalletSchema1740000000000 implements MigrationInterface {
       "id" uuid NOT NULL DEFAULT gen_random_uuid(),
       "created_at" timestamptz NOT NULL DEFAULT now(),
       "updated_at" timestamptz NOT NULL DEFAULT now(),
+      "session_valid_after" timestamptz NULL,
       CONSTRAINT "PK_wallet_account" PRIMARY KEY ("id")
     )`);
 

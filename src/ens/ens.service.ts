@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { HttpException, Injectable } from '@nestjs/common';
 import { walletError } from '../common/wallet-error';
 import { ProxyService } from '../proxy/proxy.service';
 import {
@@ -9,9 +9,9 @@ import {
   encodeResolverAddressCall,
   encodeResolverNameCall,
 } from './ens-codec';
+import { requireEnsName } from './ens-name';
 import { namehash } from './keccak';
 
-const NAME_PATTERN = /^[a-z0-9.-]{1,253}$/i;
 const ADDRESS_PATTERN = /^0x[0-9a-fA-F]{40}$/;
 
 @Injectable()
@@ -20,10 +20,7 @@ export class EnsService {
 
   async address(name: string | undefined): Promise<{ address: string | null }> {
     this.requireRpc();
-    if (!name || !NAME_PATTERN.test(name) || name.includes('..')) {
-      throw walletError(400, 'EnsNameInvalid');
-    }
-    const node = namehash(name);
+    const node = namehash(requireEnsName(name));
     const resolver = await this.resolverFor(node);
     if (!resolver) {
       return { address: null };
@@ -49,7 +46,27 @@ export class EnsService {
       { to: resolver, data: `0x${encodeResolverNameCall(node)}` },
       'latest',
     ]);
-    return { name: decodeStringReturn(resolved) };
+    const claimed = decodeStringReturn(resolved);
+    if (!claimed || !this.acceptedReverseName(claimed)) {
+      return { name: null };
+    }
+    const forward = await this.address(claimed);
+    if (forward.address?.toLowerCase() !== address.toLowerCase()) {
+      return { name: null };
+    }
+    return { name: claimed };
+  }
+
+  private acceptedReverseName(name: string): boolean {
+    try {
+      requireEnsName(name);
+      return true;
+    } catch (error) {
+      if (error instanceof HttpException) {
+        return false;
+      }
+      throw error;
+    }
   }
 
   private requireRpc(): void {
