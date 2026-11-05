@@ -84,3 +84,8 @@ npm start
 ```
 
 Outbound HTTP clients sit behind injectable interfaces, so unit tests can run without opening sockets.
+
+## Breez SDK key
+
+The passkey web wallet's Breez SDK key is `WALLET_BREEZ_API_KEY`. See
+[Breez SDK API key](docs/breez-api-key.md). Wallet API configuration stays the required and optional lists above.
