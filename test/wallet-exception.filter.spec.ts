@@ -1,5 +1,5 @@
 import { HttpException } from '@nestjs/common';
-import { WalletExceptionFilter } from '../src/common/wallet-exception.filter';
+import { WalletExceptionFilter, walletParserErrorMiddleware } from '../src/common/wallet-exception.filter';
 
 function respond(exception: unknown): { status: number; body: unknown } {
   let status: number | undefined;
@@ -78,6 +78,37 @@ describe('wallet exception filter', () => {
       status: 500,
       body: { statusCode: 500, code: 'InternalServerError', message: 'InternalServerError' },
     });
+  });
+
+  it('maps a parser error through the Express error middleware', () => {
+    const middleware = walletParserErrorMiddleware(new WalletExceptionFilter());
+    expect(middleware).toHaveLength(4);
+    let status: number | undefined;
+    let body: unknown;
+    const response = {
+      headersSent: false,
+      status: (next: number) => {
+        status = next;
+        return {
+          json: (payload: unknown) => {
+            body = payload;
+          },
+        };
+      },
+    };
+    const next = jest.fn();
+    middleware({ type: 'entity.parse.failed', status: 400, statusCode: 400 }, {} as any, response as any, next);
+    expect(next).not.toHaveBeenCalled();
+    expect(status).toBe(400);
+    expect(body).toEqual({ statusCode: 400, code: 'BadRequest', message: 'BadRequest' });
+  });
+
+  it('leaves a parser error alone once headers are sent', () => {
+    const middleware = walletParserErrorMiddleware(new WalletExceptionFilter());
+    const error = { type: 'entity.parse.failed', status: 400, statusCode: 400 };
+    const next = jest.fn();
+    middleware(error, {} as any, { headersSent: true, status: jest.fn() } as any, next);
+    expect(next).toHaveBeenCalledWith(error);
   });
 
   it('returns InternalServerError when status and statusCode disagree', () => {

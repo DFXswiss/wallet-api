@@ -38,7 +38,10 @@ export class PricesService {
     if (this.cached && this.cached.expiresAt > Date.now()) {
       return this.cached.value;
     }
-    const value = await this.safeFetch.fetchJson(source.toString(), { allowedContentTypes: ['application/json'] });
+    const value = await this.safeFetch.fetchJson(source.toString(), {
+      allowedContentTypes: ['application/json'],
+      allowedHosts: hosts,
+    });
     this.cached = { expiresAt: Date.now() + PRICE_CACHE_TTL_MS, value };
     return value;
   }

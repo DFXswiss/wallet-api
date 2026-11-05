@@ -12,6 +12,7 @@ const MAX_REDIRECTS = 3;
 export type SafeFetchOptions = {
   maxBytes?: number;
   allowedContentTypes?: string[];
+  allowedHosts?: ReadonlySet<string>;
 };
 
 type ValidatedRequest = {
@@ -46,7 +47,7 @@ export class SafeFetchService {
     const maxBytes = options.maxBytes ?? SAFE_FETCH_MAX_BYTES;
     let current = input;
     for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount += 1) {
-      const validated = await this.validateWithPins(urlToValidate(current));
+      const validated = await this.validateWithPins(urlToValidate(current), options.allowedHosts);
       let response: OutboundResponse;
       try {
         response = await this.transport.request({
@@ -84,7 +85,7 @@ export class SafeFetchService {
     return (await this.validateWithPins(input)).url;
   }
 
-  private async validateWithPins(input: URL): Promise<ValidatedRequest> {
+  private async validateWithPins(input: URL, allowedHosts?: ReadonlySet<string>): Promise<ValidatedRequest> {
     if (input.protocol !== 'https:') {
       throw walletError(400, 'OutboundUrlRefused');
     }
@@ -92,6 +93,9 @@ export class SafeFetchService {
       throw walletError(400, 'OutboundUrlRefused');
     }
     const hostname = input.hostname.toLowerCase().replace(/^\[/, '').replace(/\]$/, '');
+    if (allowedHosts && !allowedHosts.has(hostname)) {
+      throw walletError(400, 'OutboundUrlRefused');
+    }
     if (!hostname || hostname === 'localhost' || hostname.endsWith('.localhost')) {
       throw walletError(400, 'OutboundUrlRefused');
     }

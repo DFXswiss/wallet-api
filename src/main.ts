@@ -5,7 +5,7 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { json, raw, urlencoded } from 'express';
 import type { IncomingMessage } from 'node:http';
 import { AppModule } from './app.module';
-import { WalletExceptionFilter } from './common/wallet-exception.filter';
+import { WalletExceptionFilter, walletParserErrorMiddleware } from './common/wallet-exception.filter';
 import { readWalletRuntimeConfig } from './config/environment';
 
 async function bootstrap(): Promise<void> {
@@ -19,6 +19,8 @@ async function bootstrap(): Promise<void> {
   );
   app.use(json({ limit: '1mb' }));
   app.use(urlencoded({ extended: true, limit: '1mb' }));
+  const filter = new WalletExceptionFilter();
+  app.use(walletParserErrorMiddleware(filter));
   app.setGlobalPrefix('v1');
   app.useGlobalPipes(
     new ValidationPipe({
@@ -27,7 +29,7 @@ async function bootstrap(): Promise<void> {
       forbidNonWhitelisted: false,
     }),
   );
-  app.useGlobalFilters(new WalletExceptionFilter());
+  app.useGlobalFilters(filter);
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle('Wallet API')

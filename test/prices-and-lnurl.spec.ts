@@ -14,6 +14,62 @@ describe('prices and LNURL configuration', () => {
     await expect(service.prices()).rejects.toMatchObject({ status: 503 });
   });
 
+  it('passes the price host allowlist into the fetch', async () => {
+    const fetchJson = jest.fn(async (_url: string, options?: { allowedHosts?: ReadonlySet<string> }) => {
+      return { ok: true, hosts: options?.allowedHosts };
+    });
+    const config = new ConfigService({
+      WALLET_PRICE_URL: 'https://prices.example.com/v1/rates',
+      WALLET_PRICE_HOSTS: 'prices.example.com',
+    });
+    const service = new PricesService(config, { fetchJson } as any);
+    const result = await service.prices();
+    expect(result).toMatchObject({ ok: true });
+    expect((result as { hosts?: ReadonlySet<string> }).hosts?.has('prices.example.com')).toBe(true);
+  });
+
+  it('refuses a price redirect onto a host outside the allowlist', async () => {
+    const transport = {
+      request: jest.fn(async () => ({
+        status: 302,
+        headers: { location: 'https://other.example/rates' },
+        body: Buffer.alloc(0),
+      })),
+    };
+    const resolver = { resolve: jest.fn(async () => ['8.8.8.8']) };
+    const fetch = safeFetchWith(resolver, transport);
+    await expect(
+      fetch.fetch('https://prices.example.com/v1/rates', { allowedHosts: new Set(['prices.example.com']) }),
+    ).rejects.toMatchObject({ status: 400 });
+    expect(transport.request).toHaveBeenCalledTimes(1);
+  });
+
+  it('follows a redirect that stays on an allowed price host', async () => {
+    const transport = {
+      request: jest
+        .fn()
+        .mockResolvedValueOnce({
+          status: 302,
+          headers: { location: 'https://Prices.Example.com/v2' },
+          body: Buffer.alloc(0),
+        })
+        .mockResolvedValueOnce({
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+          body: Buffer.from('{"ok":true}'),
+        }),
+    };
+    const resolver = { resolve: jest.fn(async () => ['8.8.8.8']) };
+    const fetch = safeFetchWith(resolver, transport);
+    await expect(
+      fetch.fetchJson('https://prices.example.com/v1', {
+        allowedContentTypes: ['application/json'],
+        allowedHosts: new Set(['prices.example.com']),
+      }),
+    ).resolves.toEqual({ ok: true });
+    expect(transport.request).toHaveBeenCalledTimes(2);
+  });
+
   it('returns 503 when the price host is not allow-listed', async () => {
     const config = new ConfigService({
       WALLET_PRICE_URL: 'https://prices.example.com/v1/rates',

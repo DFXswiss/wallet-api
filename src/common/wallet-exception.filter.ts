@@ -1,5 +1,5 @@
 import { ArgumentsHost, Catch, ExceptionFilter, HttpException, HttpStatus } from '@nestjs/common';
-import { Response } from 'express';
+import { NextFunction, Request, Response } from 'express';
 
 type ExceptionBody = {
   statusCode?: number;
@@ -33,6 +33,20 @@ function statusAgrees(error: ReportedError, expected: number): boolean {
   const statusConflicts = typeof error.status === 'number' && error.status !== expected;
   const statusCodeConflicts = typeof error.statusCode === 'number' && error.statusCode !== expected;
   return (statusMatches || statusCodeMatches) && !statusConflicts && !statusCodeConflicts;
+}
+
+export function walletParserErrorMiddleware(
+  filter: WalletExceptionFilter,
+): (error: unknown, request: Request, response: Response, next: NextFunction) => void {
+  return (error, _request, response, next) => {
+    if (response.headersSent) {
+      next(error);
+      return;
+    }
+    filter.catch(error, {
+      switchToHttp: () => ({ getResponse: () => response }),
+    } as ArgumentsHost);
+  };
 }
 
 @Catch()
