@@ -1,0 +1,122 @@
+{
+  "schema": "a38/v1",
+  "standard": "A38",
+  "documentation": "docs/a38.md",
+  "mode": "enforce",
+  "jobs": [
+    {
+      "id": "format",
+      "name": "Format",
+      "timeout_s": 300,
+      "workflow": ".github/workflows/wallet-api-ci.yml",
+      "job": "format",
+      "executor": {
+        "adapter": "commands",
+        "config": {
+          "env": {
+            "CI": "true"
+          },
+          "npm": {
+            "node_major": 24,
+            "canaries": [
+              "@nestjs/core/package.json",
+              "typescript/lib/typescript.js",
+              "jest/bin/jest.js",
+              "prettier/package.json"
+            ]
+          },
+          "steps": [["npm", "run", "format:check"]]
+        }
+      }
+    },
+    {
+      "id": "lint",
+      "name": "Lint",
+      "timeout_s": 600,
+      "workflow": ".github/workflows/wallet-api-ci.yml",
+      "job": "lint",
+      "executor": {
+        "adapter": "commands",
+        "config": {
+          "env": {
+            "CI": "true"
+          },
+          "npm": {
+            "node_major": 24,
+            "canaries": [
+              "@nestjs/core/package.json",
+              "typescript/lib/typescript.js",
+              "jest/bin/jest.js",
+              "prettier/package.json"
+            ]
+          },
+          "steps": [["npm", "run", "lint"]]
+        }
+      }
+    },
+    {
+      "id": "build",
+      "name": "Build",
+      "timeout_s": 600,
+      "workflow": ".github/workflows/wallet-api-ci.yml",
+      "job": "build",
+      "executor": {
+        "adapter": "commands",
+        "config": {
+          "env": {
+            "CI": "true"
+          },
+          "npm": {
+            "node_major": 24,
+            "canaries": [
+              "@nestjs/core/package.json",
+              "typescript/lib/typescript.js",
+              "jest/bin/jest.js",
+              "prettier/package.json"
+            ]
+          },
+          "steps": [["npm", "run", "build"]]
+        }
+      }
+    },
+    {
+      "id": "test",
+      "name": "Test",
+      "timeout_s": 900,
+      "workflow": ".github/workflows/wallet-api-ci.yml",
+      "job": "test",
+      "executor": {
+        "adapter": "commands",
+        "config": {
+          "env": {
+            "CI": "true",
+            "ENVIRONMENT": "loc",
+            "WALLET_SESSION_SECRET": "wallet-api-ci-test-secret-32-characters"
+          },
+          "npm": {
+            "node_major": 24,
+            "canaries": [
+              "@nestjs/core/package.json",
+              "typescript/lib/typescript.js",
+              "jest/bin/jest.js",
+              "prettier/package.json"
+            ]
+          },
+          "steps": [["npm", "test"]]
+        }
+      }
+    }
+  ],
+  "exclusions": [
+    {
+      "workflow": ".github/workflows/a38-guard.yml",
+      "job": "guard",
+      "reason": "Reconciles review and CI evidence for the pull request. It is not an author test."
+    },
+    {
+      "workflow": ".github/workflows/ensure-branches.yml",
+      "job": "ensure",
+      "reason": "Creates the develop and staging refs when they are absent. It is housekeeping, not an author test."
+    }
+  ]
+}
