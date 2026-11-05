@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { IncomingHttpHeaders } from 'node:http';
 import { request as httpsRequest } from 'node:https';
+import { isIP } from 'node:net';
 import { HttpTransport, OutboundRequest, OutboundResponse } from './http-transport';
 import { createPinnedLookup } from './pinned-lookup';
 
@@ -56,7 +57,7 @@ export class FetchHttpTransport implements HttpTransport {
 
   private requestPinned(request: OutboundRequest): Promise<OutboundResponse> {
     const url = new URL(request.url);
-    const hostname = hostnameWithoutBrackets(url.hostname);
+    const target = pinnedTlsTarget(url);
     const lookup = createPinnedLookup(request.pinAddresses ?? []);
     const maxBytes = request.maxBytes ?? DEFAULT_MAX_BYTES;
     const headers: Record<string, string> = {};
@@ -65,17 +66,17 @@ export class FetchHttpTransport implements HttpTransport {
         headers[key] = value;
       }
     }
-    headers.host = requestHost(url.hostname, url.port);
+    headers.host = target.hostHeader;
 
     return new Promise((resolve, reject) => {
       const outgoing = httpsRequest(
         {
-          host: hostname,
+          host: target.connectHost,
           port: url.port || 443,
           path: `${url.pathname}${url.search}`,
           method: request.method ?? 'GET',
           headers,
-          servername: hostname,
+          servername: target.servername,
           lookup,
           signal: AbortSignal.timeout(request.timeoutMs ?? 5000),
         },
@@ -142,12 +143,17 @@ function requestBody(body: OutboundRequest['body']): BodyInit | undefined {
   return new Uint8Array(copy) as BodyInit;
 }
 
-function hostnameWithoutBrackets(hostname: string): string {
-  return hostname.replace(/^\[/, '').replace(/\]$/, '');
+export function pinnedTlsTarget(url: URL): { connectHost: string; hostHeader: string; servername?: string } {
+  const connectHost = hostnameWithoutBrackets(url.hostname);
+  return {
+    connectHost,
+    hostHeader: url.host,
+    servername: isIP(connectHost) === 0 ? connectHost : undefined,
+  };
 }
 
-function requestHost(hostname: string, port: string): string {
-  return port ? `${hostname}:${port}` : hostname;
+function hostnameWithoutBrackets(hostname: string): string {
+  return hostname.replace(/^\[/, '').replace(/\]$/, '');
 }
 
 function headerValue(value: string | string[] | undefined): string {

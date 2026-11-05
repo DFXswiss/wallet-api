@@ -17,6 +17,13 @@ describe('public addresses', () => {
     expect(isPublicAddress('64:ff9b::7f00:1')).toBe(false);
   });
 
+  it('rejects 192.0.0.0/24 and TEST-NET-1, and keeps the rest of 192.0.0.0/16', () => {
+    expect(isPublicAddress('192.0.0.1')).toBe(false);
+    expect(isPublicAddress('192.0.2.1')).toBe(false);
+    expect(isPublicAddress('192.168.1.1')).toBe(false);
+    expect(isPublicAddress('192.0.1.1')).toBe(true);
+  });
+
   it('rejects 2001:10::/28 and 2001:20::/28', () => {
     expect(isPublicAddress('2001:10::1')).toBe(false);
     expect(isPublicAddress('2001:11::1')).toBe(false);
