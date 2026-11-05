@@ -42,6 +42,7 @@ export type AuthenticationVerificationInput = {
 
 export type AuthenticationVerificationResult = {
   verified: boolean;
+  backedUp: boolean;
 };
 
 export interface WebAuthnVerifier {
@@ -116,9 +117,9 @@ export class SimpleWebAuthnVerifier implements WebAuthnVerifier {
     } catch {
       throw walletError(400, 'ChallengeInvalid');
     }
-    if (!result.verified) {
+    if (!result.verified || !result.authenticationInfo) {
       throw walletError(400, 'ChallengeInvalid');
     }
-    return { verified: true };
+    return { verified: true, backedUp: result.authenticationInfo.credentialBackedUp };
   }
 }

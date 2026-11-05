@@ -30,6 +30,16 @@ export const MAX_LIVE_REVOKE_CHALLENGES = 1000;
 const CHALLENGE_ADVISORY_LOCK = '481201001';
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+function changedBackup(
+  current: boolean | null | undefined,
+  next: boolean | undefined,
+): { backedUp: boolean } | undefined {
+  if (typeof next !== 'boolean' || next === current) {
+    return undefined;
+  }
+  return { backedUp: next };
+}
+
 export type RegisterBeginResult = {
   options: PublicKeyCredentialCreationOptionsJSON;
   challengeId: string;
@@ -197,6 +207,10 @@ export class PasskeyService {
       if (!fresh || fresh.revokedAt) {
         throw walletError(401, 'PasskeyCredentialRevoked');
       }
+      const backup = changedBackup(fresh.backedUp, verified.backedUp);
+      if (backup) {
+        await manager.update(PasskeyCredential, { id: fresh.id }, backup);
+      }
       await this.deleteUsableChallenge(manager, challenge.id, new Date());
       return { token: this.sessions.issue(credential.walletAccountId), accountId: credential.walletAccountId };
     });
@@ -274,7 +288,14 @@ export class PasskeyService {
       }
       const stampedAt = this.currentTime();
       await this.deleteUsableChallenge(manager, challenge.id, stampedAt);
-      await manager.update(PasskeyCredential, { id: credential.id }, { revokedAt: stampedAt });
+      await manager.update(
+        PasskeyCredential,
+        { id: credential.id },
+        {
+          revokedAt: stampedAt,
+          ...changedBackup(fresh.backedUp, verified.backedUp),
+        },
+      );
       const account = await manager.update(WalletAccount, { id: walletAccountId }, { sessionValidAfter: stampedAt });
       if (!account.affected) {
         throw walletError(401, 'SessionInvalid');

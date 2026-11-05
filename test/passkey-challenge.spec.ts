@@ -234,6 +234,130 @@ describe('single-use passkey challenges', () => {
     expect(events).toEqual(['lock', 'now']);
     expect(updates).toEqual([{ revokedAt: stamped }, { sessionValidAfter: stamped }]);
   });
+
+  it('stores a changed backup flag on the locked credential before revoking it', async () => {
+    const updates: Array<{ revokedAt?: Date; backedUp?: boolean; sessionValidAfter?: Date }> = [];
+    const challengeId = '00000000-0000-4000-8000-000000000001';
+    const accountId = '00000000-0000-4000-8000-000000000002';
+    const clientDataJSON = Buffer.from(JSON.stringify({ challenge: 'abc' })).toString('base64url');
+    const credential = {
+      id: 'cred-row',
+      credentialId: 'cred',
+      publicKey: 'pk',
+      walletAccountId: accountId,
+      revokedAt: null,
+      backedUp: false,
+      transports: '[]',
+    };
+    const manager = {
+      createQueryBuilder: (entity?: unknown) => {
+        if (entity) {
+          return {
+            setLock: () => manager.createQueryBuilder(entity),
+            where: () => manager.createQueryBuilder(entity),
+            andWhere: () => manager.createQueryBuilder(entity),
+            getOne: async () => credential,
+          };
+        }
+        return {
+          delete: () => manager.createQueryBuilder(),
+          from: () => manager.createQueryBuilder(),
+          where: () => manager.createQueryBuilder(),
+          andWhere: () => manager.createQueryBuilder(),
+          execute: async () => ({ affected: 1 }),
+        };
+      },
+      update: async (_entity: unknown, _criteria: unknown, values: { revokedAt?: Date; backedUp?: boolean }) => {
+        updates.push(values);
+        return { affected: 1 };
+      },
+    };
+    const service = new PasskeyService(
+      { findOneBy: async () => credential } as any,
+      {
+        findOneBy: async () => ({
+          id: challengeId,
+          purpose: 'revoke',
+          challenge: 'abc',
+          usedAt: null,
+          expiresAt: new Date(Date.now() + 60_000),
+          walletAccountId: accountId,
+        }),
+      } as any,
+      { assertConfigured: () => ({ rpId: 'localhost', origin: 'https://localhost' }) } as any,
+      {} as any,
+      { transaction: async (run: (tx: typeof manager) => Promise<unknown>) => run(manager) } as any,
+      { verifyAuthentication: async () => ({ verified: true, backedUp: true }) } as any,
+    );
+    await service.finishRevocation(accountId, {
+      challengeId,
+      response: { id: 'cred', response: { clientDataJSON } },
+    });
+    expect(updates[0]).toMatchObject({ backedUp: true });
+  });
+
+  it('stores a changed backup flag during authentication', async () => {
+    const updates: Array<{ backedUp?: boolean }> = [];
+    const challengeId = '00000000-0000-4000-8000-000000000011';
+    const accountId = '00000000-0000-4000-8000-000000000012';
+    const clientDataJSON = Buffer.from(JSON.stringify({ challenge: 'abc' })).toString('base64url');
+    const credential = {
+      id: 'cred-row',
+      credentialId: 'cred',
+      publicKey: 'pk',
+      walletAccountId: accountId,
+      revokedAt: null,
+      backedUp: false,
+      transports: '[]',
+    };
+    const manager = {
+      createQueryBuilder: (entity?: unknown) => {
+        if (entity) {
+          return {
+            setLock: () => manager.createQueryBuilder(entity),
+            where: () => manager.createQueryBuilder(entity),
+            andWhere: () => manager.createQueryBuilder(entity),
+            getOne: async () => credential,
+          };
+        }
+        return {
+          delete: () => manager.createQueryBuilder(),
+          from: () => manager.createQueryBuilder(),
+          where: () => manager.createQueryBuilder(),
+          andWhere: () => manager.createQueryBuilder(),
+          execute: async () => ({ affected: 1 }),
+        };
+      },
+      update: async (_entity: unknown, _criteria: unknown, values: { backedUp?: boolean }) => {
+        updates.push(values);
+        return { affected: 1 };
+      },
+    };
+    const service = new PasskeyService(
+      { findOneBy: async () => credential } as any,
+      {
+        findOneBy: async () => ({
+          id: challengeId,
+          purpose: 'authenticate',
+          challenge: 'abc',
+          usedAt: null,
+          expiresAt: new Date(Date.now() + 60_000),
+          walletAccountId: null,
+        }),
+      } as any,
+      { assertConfigured: () => ({ rpId: 'localhost', origin: 'https://localhost' }) } as any,
+      { issue: () => 'token' } as any,
+      { transaction: async (run: (tx: typeof manager) => Promise<unknown>) => run(manager) } as any,
+      { verifyAuthentication: async () => ({ verified: true, backedUp: true }) } as any,
+    );
+    await expect(
+      service.finishAuthentication({
+        challengeId,
+        response: { id: 'cred', response: { clientDataJSON } },
+      }),
+    ).resolves.toEqual({ token: 'token', accountId });
+    expect(updates).toEqual([{ backedUp: true }]);
+  });
 });
 
 function challengeRepository(
