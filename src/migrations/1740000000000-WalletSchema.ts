@@ -70,6 +70,7 @@ export class WalletSchema1740000000000 implements MigrationInterface {
       CONSTRAINT "FK_passkey_diagnostic_wallet_account" FOREIGN KEY ("wallet_account_id")
         REFERENCES "wallet_account"("id") ON DELETE SET NULL
     )`);
+    await queryRunner.query(`CREATE INDEX "IDX_passkey_diagnostic_created" ON "passkey_diagnostic" ("created_at")`);
   }
 
   async down(queryRunner: QueryRunner): Promise<void> {

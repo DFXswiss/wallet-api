@@ -28,6 +28,7 @@ describe('wallet schema safety', () => {
     const source = readFileSync(join(root, 'src/migrations/1740000000000-WalletSchema.ts'), 'utf8');
     expect(source).toContain('"user_handle" text NOT NULL');
     expect(source).toContain('"session_valid_after" timestamptz NULL');
+    expect(source).toContain('"IDX_passkey_diagnostic_created"');
   });
 
   it('creates all service-owned tables', () => {

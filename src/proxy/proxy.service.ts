@@ -4,6 +4,8 @@ import { walletError } from '../common/wallet-error';
 import { HTTP_TRANSPORT, HttpTransport, OutboundResponse } from '../outbound/http-transport';
 import { isValidEsploraPath, isValidEsploraQuery, parseHttpsOriginMap, parseHttpsUrlMap } from './proxy-config';
 
+export const EVM_MAX_BATCH = 16;
+
 export const EVM_ALLOWED_METHODS = new Set([
   'eth_chainId',
   'eth_blockNumber',
@@ -83,7 +85,7 @@ export class ProxyService {
       throw walletError(404, 'EvmChainNotFound');
     }
     const calls = Array.isArray(body) ? body : [body];
-    if (calls.length === 0 || calls.some((call) => !call || typeof call !== 'object')) {
+    if (calls.length === 0 || calls.length > EVM_MAX_BATCH || calls.some((call) => !call || typeof call !== 'object')) {
       throw walletError(400, 'EvmMethodNotAllowed');
     }
     for (const call of calls) {

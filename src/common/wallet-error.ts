@@ -31,4 +31,6 @@ export const WalletErrors = {
   listNotFound: () => walletError(404, 'WalletListNotFound'),
   diagnosticInvalid: () => walletError(400, 'DiagnosticInvalid'),
   diagnosticTooLarge: () => walletError(413, 'DiagnosticTooLarge'),
+  challengeRateLimited: () => walletError(429, 'ChallengeRateLimited'),
+  diagnosticRateLimited: () => walletError(429, 'DiagnosticRateLimited'),
 };

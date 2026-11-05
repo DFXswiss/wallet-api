@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { randomUUID } from 'node:crypto';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, EntityManager, Repository } from 'typeorm';
 import {
   generateAuthenticationOptions,
   generateRegistrationOptions,
@@ -25,6 +25,8 @@ import {
 } from './webauthn.verifier';
 
 const CHALLENGE_TTL_SECONDS = 600;
+export const MAX_LIVE_CHALLENGES = 1000;
+const CHALLENGE_ADVISORY_LOCK = '481201001';
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export type RegisterBeginResult = {
@@ -104,17 +106,7 @@ export class PasskeyService {
       throw walletError(400, 'ChallengeInvalid');
     }
     return this.dataSource.transaction(async (manager) => {
-      const consume = await manager
-        .createQueryBuilder()
-        .update(PasskeyChallenge)
-        .set({ usedAt: new Date() })
-        .where('id = :id', { id: challenge.id })
-        .andWhere('used_at IS NULL')
-        .andWhere('expires_at > :now', { now: new Date() })
-        .execute();
-      if (!consume.affected) {
-        throw walletError(400, 'ChallengeInvalid');
-      }
+      await this.deleteUsableChallenge(manager, challenge.id, new Date());
       const account = manager.create(WalletAccount, {});
       await manager.save(account);
       const credential = manager.create(PasskeyCredential, {
@@ -204,17 +196,7 @@ export class PasskeyService {
       if (!fresh || fresh.revokedAt) {
         throw walletError(401, 'PasskeyCredentialRevoked');
       }
-      const consume = await manager
-        .createQueryBuilder()
-        .update(PasskeyChallenge)
-        .set({ usedAt: new Date() })
-        .where('id = :id', { id: challenge.id })
-        .andWhere('used_at IS NULL')
-        .andWhere('expires_at > :now', { now: new Date() })
-        .execute();
-      if (!consume.affected) {
-        throw walletError(400, 'ChallengeInvalid');
-      }
+      await this.deleteUsableChallenge(manager, challenge.id, new Date());
       return { token: this.sessions.issue(credential.walletAccountId), accountId: credential.walletAccountId };
     });
   }
@@ -276,24 +258,27 @@ export class PasskeyService {
     if (!verified.verified) {
       throw walletError(400, 'ChallengeInvalid');
     }
-    const revokedAt = new Date();
-    await this.dataSource.transaction(async (manager) => {
-      const consume = await manager
-        .createQueryBuilder()
-        .update(PasskeyChallenge)
-        .set({ usedAt: revokedAt })
-        .where('id = :id', { id: challenge.id })
-        .andWhere('used_at IS NULL')
-        .andWhere('expires_at > :now', { now: revokedAt })
-        .execute();
-      if (!consume.affected) {
-        throw walletError(400, 'ChallengeInvalid');
+    const revokedAt = await this.dataSource.transaction(async (manager) => {
+      const fresh = await manager
+        .createQueryBuilder(PasskeyCredential, 'credential')
+        .setLock('pessimistic_write')
+        .where('credential.id = :id', { id: credential.id })
+        .andWhere('credential.wallet_account_id = :walletAccountId', { walletAccountId })
+        .getOne();
+      if (!fresh || fresh.walletAccountId !== walletAccountId) {
+        throw walletError(404, 'PasskeyCredentialNotFound');
       }
-      await manager.update(PasskeyCredential, { id: credential.id }, { revokedAt });
-      const account = await manager.update(WalletAccount, { id: walletAccountId }, { sessionValidAfter: revokedAt });
+      if (fresh.revokedAt) {
+        throw walletError(401, 'PasskeyCredentialRevoked');
+      }
+      const stampedAt = this.currentTime();
+      await this.deleteUsableChallenge(manager, challenge.id, stampedAt);
+      await manager.update(PasskeyCredential, { id: credential.id }, { revokedAt: stampedAt });
+      const account = await manager.update(WalletAccount, { id: walletAccountId }, { sessionValidAfter: stampedAt });
       if (!account.affected) {
         throw walletError(401, 'SessionInvalid');
       }
+      return stampedAt;
     });
     return { revokedAt: revokedAt.toISOString() };
   }
@@ -318,15 +303,33 @@ export class PasskeyService {
     walletAccountId: string | null,
     id = randomUUID(),
   ): Promise<PasskeyChallenge> {
-    const record = this.challenges.create({
-      id,
-      challenge,
-      purpose,
-      walletAccountId,
-      expiresAt: new Date(Date.now() + CHALLENGE_TTL_SECONDS * 1000),
-      usedAt: null,
+    return this.dataSource.transaction(async (manager) => {
+      await manager.query('SELECT pg_advisory_xact_lock($1::bigint)', [CHALLENGE_ADVISORY_LOCK]);
+      const now = new Date();
+      const challenges = manager.withRepository(this.challenges);
+      await challenges
+        .createQueryBuilder()
+        .delete()
+        .from(PasskeyChallenge)
+        .where('expires_at <= :now', { now })
+        .execute();
+      const live = await challenges
+        .createQueryBuilder('challenge')
+        .where('challenge.expires_at > :now', { now })
+        .getCount();
+      if (live >= MAX_LIVE_CHALLENGES) {
+        throw walletError(429, 'ChallengeRateLimited');
+      }
+      const record = challenges.create({
+        id,
+        challenge,
+        purpose,
+        walletAccountId,
+        expiresAt: new Date(now.getTime() + CHALLENGE_TTL_SECONDS * 1000),
+        usedAt: null,
+      });
+      return challenges.save(record);
     });
-    return this.challenges.save(record);
   }
 
   private async findUsableChallenge(
@@ -378,14 +381,26 @@ export class PasskeyService {
     }
   }
 
+  private currentTime(): Date {
+    return new Date();
+  }
+
   private async consumeChallenge(challengeId: string): Promise<void> {
-    const result = await this.challenges
+    await this.deleteUsableChallenge(this.challenges, challengeId, new Date());
+  }
+
+  private async deleteUsableChallenge(
+    manager: EntityManager | Repository<PasskeyChallenge>,
+    challengeId: string,
+    now: Date,
+  ): Promise<void> {
+    const result = await manager
       .createQueryBuilder()
-      .update(PasskeyChallenge)
-      .set({ usedAt: new Date() })
+      .delete()
+      .from(PasskeyChallenge)
       .where('id = :id', { id: challengeId })
       .andWhere('used_at IS NULL')
-      .andWhere('expires_at > :now', { now: new Date() })
+      .andWhere('expires_at > :now', { now })
       .execute();
     if (!result.affected) {
       throw walletError(400, 'ChallengeInvalid');
