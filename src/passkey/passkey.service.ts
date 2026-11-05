@@ -26,6 +26,7 @@ import {
 
 const CHALLENGE_TTL_SECONDS = 600;
 export const MAX_LIVE_CHALLENGES = 1000;
+export const MAX_LIVE_REVOKE_CHALLENGES = 1000;
 const CHALLENGE_ADVISORY_LOCK = '481201001';
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -313,11 +314,14 @@ export class PasskeyService {
         .from(PasskeyChallenge)
         .where('expires_at <= :now', { now })
         .execute();
+      const purposeClause = purpose === 'revoke' ? 'challenge.purpose = :purpose' : 'challenge.purpose <> :purpose';
       const live = await challenges
         .createQueryBuilder('challenge')
         .where('challenge.expires_at > :now', { now })
+        .andWhere(purposeClause, { purpose: 'revoke' })
         .getCount();
-      if (live >= MAX_LIVE_CHALLENGES) {
+      const cap = purpose === 'revoke' ? MAX_LIVE_REVOKE_CHALLENGES : MAX_LIVE_CHALLENGES;
+      if (live >= cap) {
         throw walletError(429, 'ChallengeRateLimited');
       }
       const record = challenges.create({

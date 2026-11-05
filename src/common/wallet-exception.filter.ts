@@ -7,6 +7,34 @@ type ExceptionBody = {
   message?: string | string[];
 };
 
+type ReportedError = {
+  type?: unknown;
+  status?: unknown;
+  statusCode?: unknown;
+};
+
+function bodyParserFailure(exception: unknown): { statusCode: number; code: string } | null {
+  if (typeof exception !== 'object' || exception === null) {
+    return null;
+  }
+  const error = exception as ReportedError;
+  if (error.type === 'entity.parse.failed' && statusAgrees(error, HttpStatus.BAD_REQUEST)) {
+    return { statusCode: HttpStatus.BAD_REQUEST, code: 'BadRequest' };
+  }
+  if (error.type === 'entity.too.large' && statusAgrees(error, HttpStatus.PAYLOAD_TOO_LARGE)) {
+    return { statusCode: HttpStatus.PAYLOAD_TOO_LARGE, code: 'PayloadTooLarge' };
+  }
+  return null;
+}
+
+function statusAgrees(error: ReportedError, expected: number): boolean {
+  const statusMatches = error.status === expected;
+  const statusCodeMatches = error.statusCode === expected;
+  const statusConflicts = typeof error.status === 'number' && error.status !== expected;
+  const statusCodeConflicts = typeof error.statusCode === 'number' && error.statusCode !== expected;
+  return (statusMatches || statusCodeMatches) && !statusConflicts && !statusCodeConflicts;
+}
+
 @Catch()
 export class WalletExceptionFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost): void {
@@ -26,6 +54,15 @@ export class WalletExceptionFilter implements ExceptionFilter {
         }
       }
       response.status(status).json({ statusCode: status, code: 'HttpError', message: exception.message });
+      return;
+    }
+    const parsed = bodyParserFailure(exception);
+    if (parsed) {
+      response.status(parsed.statusCode).json({
+        statusCode: parsed.statusCode,
+        code: parsed.code,
+        message: parsed.code,
+      });
       return;
     }
     response.status(HttpStatus.INTERNAL_SERVER_ERROR).json({

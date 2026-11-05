@@ -82,7 +82,8 @@ function isPublicIpv6(address: string): boolean {
   if (words[0] === 0x3fff && (words[1] & 0xf000) === 0) return false;
   if (words[0] === 0x2001 && words[1] === 0x0db8) return false;
   if (words[0] === 0x2001 && words[1] === 0x0002) return false;
-  if (words[0] === 0x2001 && words[1] === 0x0010) return false;
+  if (words[0] === 0x2001 && (words[1] & 0xfff0) === 0x0010) return false;
+  if (words[0] === 0x2001 && (words[1] & 0xfff0) === 0x0020) return false;
   if (words[0] === 0x2001 && words[1] === 0) return false;
   if (words[0] === 0x2002) return false;
   if (words[0] === 0x0064 && words[1] === 0xff9b && words[2] === 0 && words[3] === 0) return false;

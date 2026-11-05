@@ -43,10 +43,11 @@ Passkey relying party settings are strict:
 
 Session tokens are HMAC-signed JWTs with issuer `wallet-api`, audience `wallet`, and a 12-hour lifetime. Revoking a
 credential locks that row before the clock is read. The same timestamp invalidates tokens issued in that second or
-earlier. A successful finish deletes the challenge. Storing a challenge deletes expired rows and refuses the insert
-once 1000 live challenges remain, with 429 `ChallengeRateLimited`. Diagnostics accept a missing session. Rows older
-than 24 hours are deleted, and a further row is refused with 429 `DiagnosticRateLimited` once 500 remain. An EVM
-JSON-RPC batch of more than 16 calls is refused before any upstream request.
+earlier. A successful finish deletes the challenge. Storing a challenge deletes expired rows. Registration and
+authentication share a cap of 1000 live challenges. Revocation has its own cap of 1000. Either cap refuses the insert
+with 429 `ChallengeRateLimited`, and anonymous ceremonies cannot fill the revocation cap. Diagnostics accept a missing session. Rows older than 24 hours
+are deleted, and a further row is refused with 429 `DiagnosticRateLimited` once 500 remain. An EVM JSON-RPC batch of
+more than 16 calls is refused before any upstream request.
 
 ## Database
 

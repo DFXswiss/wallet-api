@@ -1,5 +1,5 @@
 import { HttpException } from '@nestjs/common';
-import { MAX_LIVE_CHALLENGES, PasskeyService } from '../src/passkey/passkey.service';
+import { MAX_LIVE_CHALLENGES, MAX_LIVE_REVOKE_CHALLENGES, PasskeyService } from '../src/passkey/passkey.service';
 import { WalletErrors } from '../src/common/wallet-error';
 
 async function captureError(operation: Promise<unknown>): Promise<HttpException> {
@@ -83,7 +83,7 @@ describe('single-use passkey challenges', () => {
   it('deletes expired challenges and refuses a new one at the live cap', async () => {
     const events: string[] = [];
     const saved: Array<{ id?: string }> = [];
-    const challenges = challengeRepository(events, saved, MAX_LIVE_CHALLENGES);
+    const challenges = challengeRepository(events, saved, MAX_LIVE_CHALLENGES, 0);
     const service = new PasskeyService(
       {} as any,
       {} as any,
@@ -99,7 +99,7 @@ describe('single-use passkey challenges', () => {
     expect(saved).toEqual([]);
 
     const accepted: string[] = [];
-    const open = challengeRepository(accepted, saved, MAX_LIVE_CHALLENGES - 1);
+    const open = challengeRepository(accepted, saved, MAX_LIVE_CHALLENGES - 1, 0);
     const openService = new PasskeyService(
       {} as any,
       {} as any,
@@ -114,6 +114,51 @@ describe('single-use passkey challenges', () => {
     expect(accepted).toEqual(['lock', 'sweep', 'count', 'save']);
     expect(saved).toHaveLength(1);
     expect(saved[0].id).toBe('preset-id');
+  });
+
+  it('stores a revocation when anonymous ceremonies already fill their cap', async () => {
+    const events: string[] = [];
+    const saved: Array<{ id?: string }> = [];
+    const challenges = challengeRepository(events, saved, MAX_LIVE_CHALLENGES, 0);
+    const service = new PasskeyService(
+      {} as any,
+      {} as any,
+      { assertConfigured: () => ({ rpId: 'localhost', origin: 'https://localhost' }) } as any,
+      {} as any,
+      { transaction: async (run: (manager: unknown) => Promise<unknown>) => run(challenges.manager) } as any,
+      {} as any,
+    );
+    await expect((service as any).storeChallenge('abc', 'revoke', 'account-1', 'preset-id')).resolves.toMatchObject({
+      id: 'preset-id',
+      purpose: 'revoke',
+    });
+    expect(events).toEqual(['lock', 'sweep', 'count', 'save']);
+    expect(saved).toHaveLength(1);
+    expect(saved[0].id).toBe('preset-id');
+  });
+
+  it('refuses a revocation at its own cap and still stores a registration below the anonymous cap', async () => {
+    const events: string[] = [];
+    const saved: Array<{ id?: string }> = [];
+    const challenges = challengeRepository(events, saved, MAX_LIVE_CHALLENGES - 1, MAX_LIVE_REVOKE_CHALLENGES);
+    const service = new PasskeyService(
+      {} as any,
+      {} as any,
+      { assertConfigured: () => ({ rpId: 'localhost', origin: 'https://localhost' }) } as any,
+      {} as any,
+      { transaction: async (run: (manager: unknown) => Promise<unknown>) => run(challenges.manager) } as any,
+      {} as any,
+    );
+    const error = await captureError((service as any).storeChallenge('abc', 'revoke', 'account-1', 'revoke-id'));
+    expect(error.getStatus()).toBe(429);
+    expect(error.getResponse()).toMatchObject({ code: 'ChallengeRateLimited' });
+    await expect((service as any).storeChallenge('abc', 'register', null, 'register-id')).resolves.toMatchObject({
+      id: 'register-id',
+      purpose: 'register',
+    });
+    expect(events).toEqual(['lock', 'sweep', 'count', 'lock', 'sweep', 'count', 'save']);
+    expect(saved).toHaveLength(1);
+    expect(saved[0].id).toBe('register-id');
   });
 
   it('locks the credential before it samples the revocation clock', async () => {
@@ -191,12 +236,41 @@ describe('single-use passkey challenges', () => {
   });
 });
 
-function challengeRepository(events: string[], saved: Array<{ id?: string }>, live: number) {
+function challengeRepository(
+  events: string[],
+  saved: Array<{ id?: string }>,
+  anonymousLive: number,
+  revokeLive: number,
+) {
   const repository = {
     createQueryBuilder: (alias?: string) => {
       if (alias) {
         events.push('count');
-        return { where: () => ({ getCount: async () => live }) };
+        let clause = '';
+        let countedPurpose: unknown;
+        const counter = {
+          where: (sql: string) => {
+            clause = sql;
+            return counter;
+          },
+          andWhere: (sql: string, params: { purpose: string }) => {
+            clause = `${clause} ${sql}`;
+            countedPurpose = params.purpose;
+            return counter;
+          },
+          getCount: async () => {
+            expect(clause).toContain('challenge.expires_at');
+            expect(clause).toContain('challenge.purpose');
+            const selectsAnonymous = clause.includes('challenge.purpose <> :purpose') && countedPurpose === 'revoke';
+            const selectsRevocations =
+              !selectsAnonymous && clause.includes('challenge.purpose = :purpose') && countedPurpose === 'revoke';
+            if (selectsRevocations === selectsAnonymous) {
+              throw new Error('live count must select either revocations or anonymous ceremonies');
+            }
+            return selectsRevocations ? revokeLive : anonymousLive;
+          },
+        };
+        return counter;
       }
       events.push('sweep');
       const deleted = {
