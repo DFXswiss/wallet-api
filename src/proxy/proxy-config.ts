@@ -1,17 +1,21 @@
+function emptyUrlMap(): Record<string, string> {
+  return Object.create(null);
+}
+
 export function parseHttpsOriginMap(raw: string | undefined): Record<string, string> {
   if (!raw) {
-    return {};
+    return emptyUrlMap();
   }
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
   } catch {
-    return {};
+    return emptyUrlMap();
   }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    return {};
+    return emptyUrlMap();
   }
-  const result: Record<string, string> = {};
+  const result = emptyUrlMap();
   for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
     if (typeof value !== 'string') {
       continue;
@@ -36,18 +40,18 @@ export function parseHttpsOriginMap(raw: string | undefined): Record<string, str
 
 export function parseHttpsUrlMap(raw: string | undefined): Record<string, string> {
   if (!raw) {
-    return {};
+    return emptyUrlMap();
   }
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
   } catch {
-    return {};
+    return emptyUrlMap();
   }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    return {};
+    return emptyUrlMap();
   }
-  const result: Record<string, string> = {};
+  const result = emptyUrlMap();
   for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
     if (typeof value !== 'string') {
       continue;

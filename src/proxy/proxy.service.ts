@@ -41,7 +41,7 @@ export class ProxyService {
   }
 
   async esploraGet(blockchain: string, path: string, query = ''): Promise<OutboundResponse> {
-    const base = this.esploraBases[blockchain];
+    const base = configuredUrl(this.esploraBases, blockchain);
     if (!base) {
       throw walletError(404, 'EsploraNotConfigured');
     }
@@ -62,7 +62,7 @@ export class ProxyService {
   }
 
   async esploraPostTransaction(blockchain: string, body: Buffer): Promise<OutboundResponse> {
-    const base = this.esploraBases[blockchain];
+    const base = configuredUrl(this.esploraBases, blockchain);
     if (!base) {
       throw walletError(404, 'EsploraNotConfigured');
     }
@@ -80,7 +80,7 @@ export class ProxyService {
   }
 
   async evmRpc(chainId: string, body: JsonRpcRequest | JsonRpcRequest[]): Promise<unknown> {
-    const endpoint = this.evmUrls[chainId];
+    const endpoint = configuredUrl(this.evmUrls, chainId);
     if (!endpoint) {
       throw walletError(404, 'EvmChainNotFound');
     }
@@ -117,7 +117,7 @@ export class ProxyService {
   }
 
   get ethereumRpc(): string | undefined {
-    return this.evmUrls['1'];
+    return configuredUrl(this.evmUrls, '1');
   }
 
   async ethereumEthCall(to: string, data: string): Promise<unknown> {
@@ -142,6 +142,10 @@ export class ProxyService {
       body: response.body,
     };
   }
+}
+
+function configuredUrl(map: Record<string, string>, key: string): string | undefined {
+  return Object.hasOwn(map, key) ? map[key] : undefined;
 }
 
 function isWalletHttpException(error: unknown): boolean {

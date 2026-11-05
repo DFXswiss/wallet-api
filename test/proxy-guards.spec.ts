@@ -54,4 +54,22 @@ describe('proxy guards', () => {
     const service = new ProxyService(config, { request: jest.fn() } as any);
     await expect(service.evmRpc('137', { method: 'eth_chainId' })).rejects.toMatchObject({ status: 404 });
   });
+
+  it('does not treat inherited property names as configured endpoints', async () => {
+    const transport = {
+      request: jest.fn(async () => ({ status: 200, headers: {}, body: Buffer.from('{"result":"0x1"}') })),
+    };
+    const config = new ConfigService({
+      EVM_RPC_URLS: '{"1":"https://rpc.example.com","__proto__":"https://proto.example.com"}',
+      ESPLORA_BASE_URLS: '{"btc":"https://esplora.example.com"}',
+    });
+    const service = new ProxyService(config, transport as any);
+    for (const key of ['toString', 'constructor', '__proto__']) {
+      await expect(service.esploraGet(key, 'tx/abc')).rejects.toMatchObject({ status: 404 });
+    }
+    await expect(service.evmRpc('toString', { method: 'eth_chainId' })).rejects.toMatchObject({ status: 404 });
+    await expect(service.evmRpc('constructor', { method: 'eth_chainId' })).rejects.toMatchObject({ status: 404 });
+    await expect(service.evmRpc('__proto__', { method: 'eth_chainId' })).resolves.toEqual({ result: '0x1' });
+    expect(transport.request).toHaveBeenCalledTimes(1);
+  });
 });

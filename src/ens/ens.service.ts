@@ -14,6 +14,24 @@ import { namehash } from './keccak';
 
 const ADDRESS_PATTERN = /^0x[0-9a-fA-F]{40}$/;
 
+function requireRpcEnvelope(value: unknown): unknown {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw walletError(502, 'OutboundRequestFailed');
+  }
+  if ('error' in value || !('result' in value)) {
+    throw walletError(502, 'OutboundRequestFailed');
+  }
+  const result = (value as { result?: unknown }).result;
+  if (typeof result !== 'string' || !/^0x[0-9a-f]+$/i.test(result)) {
+    throw walletError(502, 'OutboundRequestFailed');
+  }
+  const hex = result.slice(2);
+  if (hex.length < 64 || hex.length % 2 !== 0) {
+    throw walletError(502, 'OutboundRequestFailed');
+  }
+  return value;
+}
+
 @Injectable()
 export class EnsService {
   constructor(private readonly proxy: ProxyService) {}
@@ -77,10 +95,11 @@ export class EnsService {
 
   private async rpc(method: string, params: unknown[]): Promise<unknown> {
     const call = params[0] as { to: string; data: string };
-    if (method === 'eth_call') {
-      return this.proxy.ethereumEthCall(call.to, call.data);
-    }
-    return this.proxy.evmRpc('1', { jsonrpc: '2.0', id: 1, method, params });
+    const value =
+      method === 'eth_call'
+        ? await this.proxy.ethereumEthCall(call.to, call.data)
+        : await this.proxy.evmRpc('1', { jsonrpc: '2.0', id: 1, method, params });
+    return requireRpcEnvelope(value);
   }
 
   private async resolverFor(node: string): Promise<string | null> {
