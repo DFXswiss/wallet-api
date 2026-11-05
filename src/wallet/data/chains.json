@@ -1,0 +1,5 @@
+[
+  { "id": "bitcoin", "name": "Bitcoin", "family": "bitcoin" },
+  { "id": "ethereum", "name": "Ethereum", "family": "evm" },
+  { "id": "spark", "name": "Spark", "family": "spark" }
+]

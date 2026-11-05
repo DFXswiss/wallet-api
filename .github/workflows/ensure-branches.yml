@@ -1,0 +1,29 @@
+name: Ensure branches
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  ensure:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create missing long-lived branches
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          for branch in develop staging; do
+            if gh api "repos/${REPOSITORY}/git/ref/heads/${branch}" >/dev/null 2>&1; then
+              echo "${branch} already exists"
+              continue
+            fi
+            gh api --method POST "repos/${REPOSITORY}/git/refs" \
+              -f ref="refs/heads/${branch}" \
+              -f sha="${SOURCE_SHA}"
+          done

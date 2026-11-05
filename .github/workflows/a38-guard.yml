@@ -1,0 +1,52 @@
+name: dfx pr guard
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, edited, ready_for_review]
+  issue_comment:
+    types: [created, edited, deleted]
+  schedule:
+    - cron: '17,47 * * * *'
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Pull request number to reconcile
+        required: false
+        type: string
+  workflow_run:
+    workflows:
+      - Wallet API CI
+    types: [completed]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+  statuses: write
+  actions: write
+  checks: read
+
+concurrency:
+  group: a38-guard-${{ github.repository }}-${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.pr_number == '')) && 'sweep' || format('event-{0}', github.event.workflow_run.head_sha || github.event.pull_request.head.sha || github.event.issue.number || inputs.pr_number || github.run_id) }}
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    name: dfx pr guard
+    runs-on: [self-hosted, dfxci-bot]
+    timeout-minutes: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.pr_number == '')) && 45 || 10 }}
+    steps:
+      - name: dfx pr guard app token
+        id: app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.A38_GUARD_APP_CLIENT_ID }}
+          private-key: ${{ secrets.A38_GUARD_APP_PRIVATE_KEY }}
+      - name: dfx pr guard
+        uses: DFXswiss/agent/.github/actions/a38-guard@dbd5aeac2565a6414456c4640a762df1ac046cf9
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          actor_app_slug: ${{ steps.app-token.outputs.app-slug }}
+          repository: ${{ github.repository }}
+          pr: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number }}
+          all_open: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.pr_number == '') }}
