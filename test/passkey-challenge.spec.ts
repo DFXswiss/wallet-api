@@ -358,7 +358,89 @@ describe('single-use passkey challenges', () => {
     ).resolves.toEqual({ token: 'token', accountId });
     expect(updates).toEqual([{ backedUp: true }]);
   });
+
+  it('maps a duplicate credential id to 409', async () => {
+    let saves = 0;
+    const { service, body } = registrationFinishService(async (value) => {
+      saves += 1;
+      if (saves === 2) {
+        const error = new Error('duplicate key') as Error & { code: string };
+        error.code = '23505';
+        throw error;
+      }
+      return { id: 'account', ...(value as object) };
+    });
+    const error = await captureError(service.finishRegistration(body));
+    expect(error.getStatus()).toBe(409);
+    expect(error.getResponse()).toMatchObject({
+      statusCode: 409,
+      code: 'PasskeyCredentialAlreadyRegistered',
+      message: 'PasskeyCredentialAlreadyRegistered',
+    });
+  });
+
+  it('leaves a different database error unchanged', async () => {
+    const { service, body } = registrationFinishService(async () => {
+      const error = new Error('foreign key') as Error & { code: string };
+      error.code = '23503';
+      throw error;
+    });
+    await expect(service.finishRegistration(body)).rejects.toMatchObject({ code: '23503' });
+  });
 });
+
+function registrationFinishService(save: (value: unknown) => Promise<unknown>) {
+  const challengeId = '00000000-0000-4000-8000-000000000021';
+  const clientDataJSON = Buffer.from(JSON.stringify({ challenge: 'abc' })).toString('base64url');
+  const manager = {
+    createQueryBuilder: () => {
+      const deleted = {
+        delete: () => deleted,
+        from: () => deleted,
+        where: () => deleted,
+        andWhere: () => deleted,
+        execute: async () => ({ affected: 1 }),
+      };
+      return deleted;
+    },
+    create: (_entity: unknown, value: unknown) => value,
+    save,
+  };
+  const service = new PasskeyService(
+    {} as any,
+    {
+      findOneBy: async () => ({
+        id: challengeId,
+        purpose: 'register',
+        challenge: 'abc',
+        usedAt: null,
+        expiresAt: new Date(Date.now() + 60_000),
+        walletAccountId: null,
+      }),
+    } as any,
+    { assertConfigured: () => ({ rpId: 'localhost', origin: 'https://localhost' }) } as any,
+    { issue: () => 'token' } as any,
+    { transaction: async (run: (tx: typeof manager) => Promise<unknown>) => run(manager) } as any,
+    {
+      verifyRegistration: async () => ({
+        verified: true,
+        credentialId: 'cred',
+        publicKey: 'pk',
+        counter: 0,
+        backupEligible: true,
+        backedUp: false,
+        transports: [],
+      }),
+    } as any,
+  );
+  return {
+    service,
+    body: {
+      challengeId,
+      response: { id: 'cred', response: { clientDataJSON } },
+    },
+  };
+}
 
 function challengeRepository(
   events: string[],

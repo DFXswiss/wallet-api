@@ -4,8 +4,8 @@ Wallet API is the public, non-custodial wallet HTTP API. It stores passkey crede
 wallet addresses, and diagnostics in a Postgres database owned by this service. A wallet session issued by this API is a
 session for Wallet API only; it is not a customer session or a token for any other service.
 
-The seed and the passkey private key never reach this process. Registration stores only the COSE public key and the
-WebAuthn credential id.
+The seed and the passkey private key never reach this process. Registration stores the COSE public key, the WebAuthn
+credential id, the user handle, backup eligibility, the backup flag, the AAGUID, and the transports.
 
 Buy, sell, KYC, swaps, banking, and related customer account flows are outside this repository. There are no claim,
 link, or account-merge endpoints.

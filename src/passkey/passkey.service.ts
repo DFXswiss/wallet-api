@@ -30,6 +30,14 @@ export const MAX_LIVE_REVOKE_CHALLENGES = 1000;
 const CHALLENGE_ADVISORY_LOCK = '481201001';
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+function uniqueViolation(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) {
+    return false;
+  }
+  const record = error as { code?: unknown; driverError?: { code?: unknown } };
+  return record.code === '23505' || record.driverError?.code === '23505';
+}
+
 function changedBackup(
   current: boolean | null | undefined,
   next: boolean | undefined,
@@ -116,24 +124,31 @@ export class PasskeyService {
     if (!verified.verified || !verified.credentialId || !verified.publicKey) {
       throw walletError(400, 'ChallengeInvalid');
     }
-    return this.dataSource.transaction(async (manager) => {
-      await this.deleteUsableChallenge(manager, challenge.id, new Date());
-      const account = manager.create(WalletAccount, {});
-      await manager.save(account);
-      const credential = manager.create(PasskeyCredential, {
-        walletAccountId: account.id,
-        credentialId: verified.credentialId,
-        publicKey: verified.publicKey,
-        userHandle,
-        backupEligible: verified.backupEligible,
-        backedUp: verified.backedUp,
-        aaguid: verified.aaguid ?? null,
-        transports: JSON.stringify(verified.transports ?? []),
-        revokedAt: null,
+    try {
+      return await this.dataSource.transaction(async (manager) => {
+        await this.deleteUsableChallenge(manager, challenge.id, new Date());
+        const account = manager.create(WalletAccount, {});
+        await manager.save(account);
+        const credential = manager.create(PasskeyCredential, {
+          walletAccountId: account.id,
+          credentialId: verified.credentialId,
+          publicKey: verified.publicKey,
+          userHandle,
+          backupEligible: verified.backupEligible,
+          backedUp: verified.backedUp,
+          aaguid: verified.aaguid ?? null,
+          transports: JSON.stringify(verified.transports ?? []),
+          revokedAt: null,
+        });
+        await manager.save(credential);
+        return { token: this.sessions.issue(account.id), accountId: account.id };
       });
-      await manager.save(credential);
-      return { token: this.sessions.issue(account.id), accountId: account.id };
-    });
+    } catch (error) {
+      if (uniqueViolation(error)) {
+        throw walletError(409, 'PasskeyCredentialAlreadyRegistered');
+      }
+      throw error;
+    }
   }
 
   async beginAuthentication(credentialIdInput: unknown): Promise<AuthenticateBeginResult> {
