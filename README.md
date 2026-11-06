@@ -84,3 +84,8 @@ npm start
 ```
 
 Outbound HTTP clients sit behind injectable interfaces, so unit tests can run without opening sockets.
+
+## Breez SDK key
+
+This service does not read `WALLET_BREEZ_API_KEY`. Wallet API configuration stays the required and optional
+lists above.
