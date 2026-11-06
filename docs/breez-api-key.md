@@ -1,9 +1,10 @@
 # Breez SDK API key
 
-The passkey web wallet passes `WALLET_BREEZ_API_KEY` to the Breez SDK as `apiKey`. That wallet's deployment
-environment supplies the value when it has one. The passkey web wallet starts when the value is absent.
+Wallet API does not read `WALLET_BREEZ_API_KEY`. The name is not one of the required or optional variables in
+the README. This service's relying-party hosts are the public hosts below.
 
-Each public host has its own key. The keys are not in git.
+The passkey web wallet passes one value per host to the Breez SDK as `apiKey`. The values are not in git. The
+passkey web wallet starts when the value is absent.
 
 | Environment | Public host         |
 | ----------- | ------------------- |
