@@ -1,0 +1,29 @@
+{
+  "schema": "pr-guard/v1",
+  "a38": {
+    "enforce": ["main", "develop"],
+    "exclude": [],
+    "default": "enforce"
+  },
+  "one_review_authors": [
+    "davidleomay",
+    "TaprootFreak",
+    "TaprootFreakAI",
+    "Danswar",
+    "davidleomayAI",
+    "Daniel-DFX"
+  ],
+  "workflow_approval": {
+    "enabled": true,
+    "workflows": [".github/workflows/wallet-api-ci.yml"]
+  },
+  "lifecycle": {
+    "enabled": true,
+    "auto_ready": true,
+    "required_workflows": [".github/workflows/wallet-api-ci.yml"],
+    "ignored_workflows": [".github/workflows/a38-guard.yml", ".github/workflows/ensure-branches.yml"],
+    "required_checks": {
+      ".github/workflows/wallet-api-ci.yml": ["Format", "Lint", "Build", "Test"]
+    }
+  }
+}

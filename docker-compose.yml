@@ -1,0 +1,14 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: wallet
+      POSTGRES_USER: wallet
+      POSTGRES_PASSWORD: wallet
+    ports:
+      - "5432:5432"
+    volumes:
+      - wallet-postgres-data:/var/lib/postgresql/data
+
+volumes:
+  wallet-postgres-data:
