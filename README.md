@@ -88,4 +88,4 @@ Outbound HTTP clients sit behind injectable interfaces, so unit tests can run wi
 ## Breez SDK key
 
 This service does not read `WALLET_BREEZ_API_KEY`. Wallet API configuration stays the required and optional
-lists above. The note for that name is [Breez SDK API key](docs/breez-api-key.md).
+lists above.
