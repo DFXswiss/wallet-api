@@ -10,9 +10,10 @@ DFXswiss/app stays a thin client. A pull request that leaves any of that work in
 work this service does not expose yet.
 The rule is `README.md`, section "Where the logic lives".
 
-The device keeps only these wallet steps: it holds the seed, it derives an address from that seed, it signs the
-WebAuthn challenge, and it signs the unsigned payment. It returns the signed payment. Submitting that payment
-belongs in this service. A pull request that moves the seed or the private key into this service is also incomplete.
+The device holds the seed, derives an address from that seed, signs the WebAuthn challenge, and signs the unsigned
+payment. It returns the signed payment. For Bitcoin and EVM, submitting that payment belongs in this service. A
+Spark payment stays on the device, because this service does not read `WALLET_BREEZ_API_KEY` and the seed never
+reaches this process. A pull request that moves the seed or the private key into this service is also incomplete.
 
 The repository starts with `main` only. The workflow on `main` creates `develop` and `staging` when those refs are
 absent. The pull request that introduces that workflow targets `main`. Later pull requests target `develop`.
