@@ -5,15 +5,17 @@ Changes to Wallet API come through a draft pull request against `develop`. Pull 
 
 ## Where the logic lives
 
-Wallet logic, data preparation, and calculations belong in this repository, except the device steps below.
-DFXswiss/app stays a thin client. A pull request that leaves any of that work in the app is incomplete, including
-work this service does not expose yet.
-The rule is `README.md`, section "Where the logic lives".
+Wallet logic, data preparation, and calculations belong in this repository. DFXswiss/app stays a thin client. A pull
+request that leaves that work in the app is incomplete, including work this service does not expose yet. The rule is
+`README.md`, section "Where the logic lives".
 
-The device holds the seed, derives an address from that seed, signs the WebAuthn challenge, and signs the unsigned
-payment. It returns the signed payment. For Bitcoin and EVM, submitting that payment belongs in this service. A
-Spark payment stays on the device, because this service does not read `WALLET_BREEZ_API_KEY` and the seed never
-reaches this process. A pull request that moves the seed or the private key into this service is also incomplete.
+For Bitcoin and EVM, balances, prices, fees, input selection, destination checks, history, the unsigned payment, and
+submission belong in this service. The device holds the seed, derives an address from that seed, signs the WebAuthn
+challenge, and signs the unsigned payment. It returns the signed payment.
+
+Any Spark step that needs `WALLET_BREEZ_API_KEY` or the seed stays on the device. This service may store the Spark
+address and return destination checks and prices. Lightning-address and LNURL lookup belong in this service. A pull
+request that moves the seed or the private key into this service is incomplete.
 
 The repository starts with `main` only. The workflow on `main` creates `develop` and `staging` when those refs are
 absent. The pull request that introduces that workflow targets `main`. Later pull requests target `develop`.

@@ -1,25 +1,25 @@
 # Wallet API
 
 Wallet logic, data preparation, and calculations belong in this service.
-[DFXswiss/app](https://github.com/DFXswiss/app) stays a thin client. The only steps that stay on the device are named
+[DFXswiss/app](https://github.com/DFXswiss/app) stays a thin client. Device steps and the Spark exception are named
 below.
 
 ## Where the logic lives
 
-This is where that work goes. The app shows what this API returns and sends the user's intent back.
+The app shows what this API returns and sends the user's intent back. It does not talk to a chain node.
 
-Balances, prices, fees, input selection, destination checks, history, and the unsigned payment belong in this
-service. The app does not do that work, and it does not talk to a chain node. A screen that needs a number receives
-that number from this API. New wallet behaviour is added here, not in the app.
-
-An endpoint that does not exist yet is not a reason to put the work in the app. The work still belongs in this
-repository.
+For Bitcoin and EVM, this service prepares balances, prices, fees, input selection, destination checks, history, and
+the unsigned payment. A screen that needs one of those numbers receives it from this API. An endpoint that does not
+exist yet is not a reason to put that work in the app.
 
 The device holds the seed, derives an address from that seed, signs the WebAuthn challenge, and signs the unsigned
 payment. It returns the signed payment. For Bitcoin and EVM, submitting that payment belongs in this service.
 
-A Spark payment stays on the device. This service does not read `WALLET_BREEZ_API_KEY`, and the seed never reaches
-this process.
+Spark is different. This service does not read `WALLET_BREEZ_API_KEY`, and the seed never reaches this process. Any
+Spark step that needs that key or the seed stays on the device: preparing the payment, signing it, submitting it, and
+the balance or history the Spark client reads. This service may store the Spark address and return destination checks
+and prices. Lightning-address and LNURL lookup belong in this service. The payment after that lookup follows the
+Bitcoin rule or the Spark rule above.
 
 Wallet API is the public, non-custodial wallet HTTP API. It stores passkey credentials, one-time WebAuthn challenges,
 wallet addresses, and diagnostics in a Postgres database owned by this service. A wallet session issued by this API is a
