@@ -117,6 +117,31 @@
       "workflow": ".github/workflows/ensure-branches.yml",
       "job": "ensure",
       "reason": "Creates the develop and staging refs when they are absent. It is housekeeping, not an author test."
+    },
+    {
+      "workflow": ".github/workflows/auto-release-pr.yaml",
+      "job": "create-release-pr",
+      "reason": "Opens a draft pull request from develop to main. It is not an author test."
+    },
+    {
+      "workflow": ".github/workflows/wallet-api-dev.yaml",
+      "job": "build-and-push",
+      "reason": "Publishes the develop container image. It is not an author test."
+    },
+    {
+      "workflow": ".github/workflows/wallet-api-stg.yaml",
+      "job": "build-and-push",
+      "reason": "Publishes the staging container image. It is not an author test."
+    },
+    {
+      "workflow": ".github/workflows/wallet-api-prd.yaml",
+      "job": "build-and-push",
+      "reason": "Publishes the production container image. It is not an author test."
+    },
+    {
+      "workflow": ".github/workflows/main-from-develop.yml",
+      "job": "only-develop",
+      "reason": "Checks that pull requests into main come from develop. It is not an author test."
     }
   ]
 }
