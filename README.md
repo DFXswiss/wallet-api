@@ -5,16 +5,18 @@ All wallet logic, data preparation, and calculations belong in this service.
 
 ## Where the logic lives
 
-This service prepares every wallet figure and every payment. The app shows what this API returns and sends the user's
-intent back. It prepares no wallet data and it calculates nothing.
+This is where that work goes. The app shows what this API returns and sends the user's intent back. It prepares no
+wallet data and it calculates nothing.
 
-The app does not read a balance, price an amount, choose a fee, select inputs, check an address, build a transaction,
-or talk to a chain node. This service does each of those, completely, on every request. A screen that needs a number
-receives that number from this API. A new wallet behaviour is added here, not in the app.
+Balances, prices, fees, input selection, address checks, history, and the unsigned payment belong in this service.
+The app does not do that work, and it does not talk to a chain node. A screen that needs a number receives that
+number from this API. New wallet behaviour is added here, not in the app.
 
-The seed and the passkey private key never reach this process. This service prepares the unsigned payment. The device
-applies the signature and sends it back. This service never signs and never stores a seed. That signature is the only
-wallet step that stays on the device.
+An endpoint that does not exist yet is not a reason to put the work in the app. The work still belongs in this
+repository.
+
+The device applies the signature to the unsigned payment. That signature is the only wallet step that stays on the
+device.
 
 Wallet API is the public, non-custodial wallet HTTP API. It stores passkey credentials, one-time WebAuthn challenges,
 wallet addresses, and diagnostics in a Postgres database owned by this service. A wallet session issued by this API is a

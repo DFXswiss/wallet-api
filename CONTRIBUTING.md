@@ -6,12 +6,11 @@ Changes to Wallet API come through a draft pull request against `develop`. Pull 
 ## Where the logic lives
 
 All wallet logic, data preparation, and calculations belong in this repository. DFXswiss/app stays a thin client. A
-pull request that leaves any of that work in the app is incomplete. The rule is `README.md`, section "Where the logic
-lives".
+pull request that leaves any of that work in the app is incomplete, including work this service does not expose yet.
+The rule is `README.md`, section "Where the logic lives".
 
-The seed and the passkey private key never reach this process. This service prepares the unsigned payment. The device
-applies the signature. That signature is the only wallet step that stays on the device. A pull request that moves the
-seed or the private key into this service is also incomplete.
+The device applies the signature. That signature is the only wallet step that stays on the device. A pull request
+that moves the seed or the private key into this service is also incomplete.
 
 The repository starts with `main` only. The workflow on `main` creates `develop` and `staging` when those refs are
 absent. The pull request that introduces that workflow targets `main`. Later pull requests target `develop`.
