@@ -1,5 +1,21 @@
 # Wallet API
 
+All wallet logic, data preparation, and calculations belong in this service.
+[DFXswiss/app](https://github.com/DFXswiss/app) stays a thin client and does not do that work.
+
+## Where the logic lives
+
+This service prepares every wallet figure and every payment. The app shows what this API returns and sends the user's
+intent back. It prepares no wallet data and it calculates nothing.
+
+The app does not read a balance, price an amount, choose a fee, select inputs, check an address, build a transaction,
+or talk to a chain node. This service does each of those, completely, on every request. A screen that needs a number
+receives that number from this API. A new wallet behaviour is added here, not in the app.
+
+The seed and the passkey private key never reach this process. This service prepares the unsigned payment. The device
+applies the signature and sends it back. This service never signs and never stores a seed. That signature is the only
+wallet step that stays on the device.
+
 Wallet API is the public, non-custodial wallet HTTP API. It stores passkey credentials, one-time WebAuthn challenges,
 wallet addresses, and diagnostics in a Postgres database owned by this service. A wallet session issued by this API is a
 session for Wallet API only; it is not a customer session or a token for any other service.
