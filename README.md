@@ -1,22 +1,22 @@
 # Wallet API
 
-All wallet logic, data preparation, and calculations belong in this service.
-[DFXswiss/app](https://github.com/DFXswiss/app) stays a thin client and does not do that work.
+Wallet logic, data preparation, and calculations belong in this service.
+[DFXswiss/app](https://github.com/DFXswiss/app) stays a thin client. The only steps that stay on the device are named
+below.
 
 ## Where the logic lives
 
-This is where that work goes. The app shows what this API returns and sends the user's intent back. It prepares no
-wallet data and it calculates nothing.
+This is where that work goes. The app shows what this API returns and sends the user's intent back.
 
-Balances, prices, fees, input selection, address checks, history, and the unsigned payment belong in this service.
-The app does not do that work, and it does not talk to a chain node. A screen that needs a number receives that
-number from this API. New wallet behaviour is added here, not in the app.
+Balances, prices, fees, input selection, destination checks, history, and the unsigned payment belong in this
+service. The app does not do that work, and it does not talk to a chain node. A screen that needs a number receives
+that number from this API. New wallet behaviour is added here, not in the app.
 
 An endpoint that does not exist yet is not a reason to put the work in the app. The work still belongs in this
 repository.
 
-The device applies the signature to the unsigned payment. That signature is the only wallet step that stays on the
-device.
+The device keeps only these wallet steps: it holds the seed, it holds the passkey private key, it derives an address
+from that seed, and it applies the signature to the unsigned payment.
 
 Wallet API is the public, non-custodial wallet HTTP API. It stores passkey credentials, one-time WebAuthn challenges,
 wallet addresses, and diagnostics in a Postgres database owned by this service. A wallet session issued by this API is a
