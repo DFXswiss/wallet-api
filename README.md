@@ -15,8 +15,9 @@ that number from this API. New wallet behaviour is added here, not in the app.
 An endpoint that does not exist yet is not a reason to put the work in the app. The work still belongs in this
 repository.
 
-The device keeps only these wallet steps: it holds the seed, it holds the passkey private key, it derives an address
-from that seed, and it applies the signature to the unsigned payment.
+The device keeps only these wallet steps: it holds the seed, it derives an address from that seed, it signs the
+WebAuthn challenge, and it signs the unsigned payment. It returns the signed payment. Submitting that payment
+belongs in this service.
 
 Wallet API is the public, non-custodial wallet HTTP API. It stores passkey credentials, one-time WebAuthn challenges,
 wallet addresses, and diagnostics in a Postgres database owned by this service. A wallet session issued by this API is a
