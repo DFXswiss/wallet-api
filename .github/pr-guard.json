@@ -21,7 +21,7 @@
     "enabled": true,
     "auto_ready": true,
     "required_workflows": [".github/workflows/wallet-api-ci.yml"],
-    "ignored_workflows": [".github/workflows/a38-guard.yml", ".github/workflows/ensure-branches.yml"],
+    "ignored_workflows": [".github/workflows/a38-guard.yml", ".github/workflows/ensure-branches.yml", ".github/workflows/auto-release-pr.yaml", ".github/workflows/release-pr-author.yml"],
     "required_checks": {
       ".github/workflows/wallet-api-ci.yml": ["Format", "Lint", "Build", "Test"]
     }
