@@ -123,3 +123,5 @@ failed check or migration does not listen.
 
 This service does not read `WALLET_BREEZ_API_KEY`. Wallet API configuration stays the required and optional
 lists above.
+
+- Relying-party (`dev` / `loc`): Generic RP IDs must be neither `app.dfx.swiss`, nor a host below it, nor a parent domain of it. The exact `dev.app.dfx.swiss` development pair remains allowed.
