@@ -16,6 +16,8 @@ describe('relying party validation', () => {
 
   it('rejects a trailing-dot origin hostname on dev', () => {
     expect(evaluateRelyingParty('dev', 'dev.app.dfx.swiss', 'https://dev.app.dfx.swiss.').configured).toBe(false);
+    expect(evaluateRelyingParty('loc', 'localhost', 'http://localhost.').configured).toBe(false);
+    expect(evaluateRelyingParty('dev', 'example.com', 'https://example.com.').configured).toBe(false);
   });
 
   it('rejects an upper-case rp id', () => {
