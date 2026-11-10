@@ -1,22 +1,35 @@
-name: wallet-api STG
+name: wallet-api PRD
 
 on:
   push:
-    branches: [staging]
+    branches: [main]
   workflow_dispatch:
 
 env:
   IMAGE: dfxswiss/wallet-api
-  TAG: stg
+  TAG: latest
 
 permissions:
   contents: read
 
+concurrency:
+  group: wallet-api-image-latest
+  cancel-in-progress: false
+
 jobs:
   build-and-push:
-    name: Build and push Docker image (STG)
+    name: Build and push Docker image (PRD)
     runs-on: ubuntu-24.04-arm
     steps:
+      - name: Check publish branch
+        env:
+          REF: ${{ github.ref }}
+        run: |
+          if [ "${REF}" != "refs/heads/main" ]; then
+            echo "::error::The latest tag publishes only from refs/heads/main"
+            exit 1
+          fi
+
       - name: Checkout
         uses: actions/checkout@v4
 
