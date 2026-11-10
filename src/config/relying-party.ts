@@ -65,8 +65,8 @@ export function evaluateRelyingParty(
       : { configured: false };
   }
 
-  // An app.dfx.swiss credential works from any *.app.dfx.swiss page, so dev and loc reject that production
-  // RP id and every host under it; the dev host uses its own RP id.
+  // An app.dfx.swiss credential works from any *.app.dfx.swiss page, so dev and loc reject the production RP id,
+  // its descendants, and its parent domains; the dev host uses its own RP id.
   if (
     rpIdInput === PRODUCTION_RP_ID ||
     rpIdInput.endsWith(`.${PRODUCTION_RP_ID}`) ||

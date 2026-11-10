@@ -61,10 +61,12 @@ RP ids and origin hosts are compared exactly, in lower case and without a traili
 
 - `prd` requires `app.dfx.swiss` and `https://app.dfx.swiss`.
 - `stg` requires `stg.app.dfx.swiss` and `https://stg.app.dfx.swiss`.
-- `dev` requires `dev.app.dfx.swiss` and `https://dev.app.dfx.swiss`, or another non-production RP id that is neither
-  `app.dfx.swiss` nor under it and an HTTPS origin whose hostname is that RP id.
-- `loc` requires a non-production RP id that is neither `app.dfx.swiss` nor under it and an origin whose hostname is
-  that RP id. HTTPS or HTTP may be used.
+- `dev` requires an RP id that is neither `app.dfx.swiss`, nor a host under it, nor a parent domain of it
+  (`dfx.swiss`, `swiss`) and an HTTPS origin whose hostname is that RP id. It additionally accepts exactly
+  `dev.app.dfx.swiss` with `https://dev.app.dfx.swiss`.
+- `loc` requires an RP id that is neither `app.dfx.swiss`, nor a host under it, nor a parent domain of it
+  (`dfx.swiss`, `swiss`) and an origin whose hostname is that RP id. HTTPS or HTTP may be used.
+  `dev.app.dfx.swiss` is not accepted.
 
 Session tokens are HMAC-signed JWTs with issuer `wallet-api`, audience `wallet`, and a 12-hour lifetime. Revoking a
 credential locks that row before the clock is read. The same timestamp invalidates tokens issued in that second or
@@ -123,5 +125,3 @@ failed check or migration does not listen.
 
 This service does not read `WALLET_BREEZ_API_KEY`. Wallet API configuration stays the required and optional
 lists above.
-
-- Relying-party (`dev` / `loc`): Generic RP IDs must be neither `app.dfx.swiss`, nor a host below it, nor a parent domain of it. The exact `dev.app.dfx.swiss` development pair remains allowed.
