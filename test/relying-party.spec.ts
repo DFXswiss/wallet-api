@@ -22,6 +22,23 @@ describe('relying party validation', () => {
     });
   });
 
+  it('accepts the exact dev pair', () => {
+    expect(evaluateRelyingParty('dev', 'dev.app.dfx.swiss', 'https://dev.app.dfx.swiss')).toEqual({
+      configured: true,
+      rpId: 'dev.app.dfx.swiss',
+      origin: 'https://dev.app.dfx.swiss',
+    });
+  });
+
+  it.each([
+    'http://dev.app.dfx.swiss',
+    'https://dev.app.dfx.swiss:3000',
+    'https://dev.app.dfx.swiss/passkey',
+    'https://other.example',
+  ])('rejects the dev rp id with origin %s', (origin) => {
+    expect(evaluateRelyingParty('dev', 'dev.app.dfx.swiss', origin).configured).toBe(false);
+  });
+
   it('rejects the prd rp id on stg', () => {
     expect(evaluateRelyingParty('stg', 'app.dfx.swiss', 'https://app.dfx.swiss').configured).toBe(false);
   });
@@ -32,6 +49,14 @@ describe('relying party validation', () => {
 
   it('rejects a production suffix on dev', () => {
     expect(evaluateRelyingParty('dev', 'evil.app.dfx.swiss', 'https://evil.app.dfx.swiss').configured).toBe(false);
+  });
+
+  it.each(['stg.app.dfx.swiss', 'x.app.dfx.swiss'])('rejects the %s rp id on dev', (rpId) => {
+    expect(evaluateRelyingParty('dev', rpId, `https://${rpId}`).configured).toBe(false);
+  });
+
+  it('rejects the dev rp id on loc', () => {
+    expect(evaluateRelyingParty('loc', 'dev.app.dfx.swiss', 'https://dev.app.dfx.swiss').configured).toBe(false);
   });
 
   it('accepts plain http localhost on loc', () => {

@@ -9,6 +9,8 @@ const PRODUCTION_RP_ID = 'app.dfx.swiss';
 const PRODUCTION_ORIGIN = 'https://app.dfx.swiss';
 const STAGING_RP_ID = 'stg.app.dfx.swiss';
 const STAGING_ORIGIN = 'https://stg.app.dfx.swiss';
+const DEVELOPMENT_RP_ID = 'dev.app.dfx.swiss';
+const DEVELOPMENT_ORIGIN = 'https://dev.app.dfx.swiss';
 
 function evaluateOrigin(rpId: string, origin: string, environment: WalletEnvironment): boolean {
   let parsed: URL;
@@ -54,6 +56,14 @@ export function evaluateRelyingParty(
       : { configured: false };
   }
 
+  if (environment === 'dev' && rpIdInput === DEVELOPMENT_RP_ID) {
+    return originInput === DEVELOPMENT_ORIGIN
+      ? { configured: true, rpId: rpIdInput, origin: originInput }
+      : { configured: false };
+  }
+
+  // An app.dfx.swiss credential works from any *.app.dfx.swiss page, so dev and loc reject that production
+  // RP id and every host under it; the dev host uses its own RP id.
   if (rpIdInput === PRODUCTION_RP_ID || rpIdInput.endsWith(`.${PRODUCTION_RP_ID}`)) {
     return { configured: false };
   }
