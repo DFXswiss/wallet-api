@@ -1,15 +1,15 @@
 # Pull requests into main must be opened by the Auto Release PR workflow (github-actions[bot]).
+# pull_request_target runs this file from the default branch, so a pull request cannot change the check that judges it. Never add a checkout or run pull request code here.
 # Do not add a YAML conditional on the job or on any step. A skipped check counts as passing.
 
 name: Release PR author
 
 on:
-  pull_request:
+  pull_request_target:
     branches: [main]
     types: [opened, synchronize, reopened, ready_for_review, edited]
 
-permissions:
-  contents: read
+permissions: {}
 
 jobs:
   bot-author:

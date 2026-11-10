@@ -21,7 +21,8 @@ The repository starts with `main` only. The workflow on `main` creates `develop`
 absent. The pull request that introduces that workflow targets `main`. Later pull requests target `develop`.
 
 The pull request from `develop` into `main` is opened only by the Auto Release PR workflow, as `github-actions[bot]`. A
-person does not open it. The check "Release PR from the bot" fails any other author.
+person does not open it. On the next push to `develop`, the workflow closes a release pull request that a person opened
+and opens its own. The check "Release PR from the bot" fails any other author.
 
 A38 is the review and local CI standard. The job inventory is `.github/a38.json`. The branch scope is
 `.github/pr-guard.json`. Because `main` is the default branch, the guard enforces `main` and `develop`.

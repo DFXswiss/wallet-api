@@ -31,9 +31,21 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          existing=$(gh pr list --repo "$GITHUB_REPOSITORY" --base main --head "${GITHUB_REPOSITORY_OWNER}:develop" --state open --json number --jq 'length')
-          if [ "$existing" != "0" ]; then
-            echo "An open pull request from develop to main already exists; skipping."
+          bot='github-actions[bot]'
+          close_note='Closed: the pull request from develop into main is opened only by the Auto Release PR workflow, as github-actions[bot].'
+          open_prs=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls?state=open&base=main&head=${GITHUB_REPOSITORY_OWNER}:develop&per_page=100" --jq '.[] | "\(.number) \(.user.login)"')
+          bot_pr=""
+          while read -r number author; do
+            [ -n "${number}" ] || continue
+            if [ "${author}" = "${bot}" ]; then
+              bot_pr="${number}"
+              continue
+            fi
+            echo "Closing #${number}, opened by ${author}."
+            gh pr close "${number}" --repo "${GITHUB_REPOSITORY}" --comment "${close_note}"
+          done <<< "${open_prs}"
+          if [ -n "${bot_pr}" ]; then
+            echo "Release pull request #${bot_pr} from ${bot} is already open; skipping."
             exit 0
           fi
           ahead=$(git rev-list --count origin/main..origin/develop)
