@@ -2,19 +2,20 @@ import { HttpException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { evaluateRelyingParty } from '../src/config/relying-party';
 
-describe.each(['dev', 'loc'] as const)('%s production RP ancestor protection', (environment) => {
-  it.each([
-    ['dfx.swiss', 'https://dfx.swiss'],
-    ['swiss', 'https://swiss'],
-  ])('refuses production RP ID ancestor %s', (rpId, origin) => {
-    expect(() => evaluateRelyingParty(environment, rpId, origin)).toThrow();
-  });
-});
 import { RelyingPartyService } from '../src/config/relying-party.service';
 import { parseEnvironment } from '../src/config/environment';
 import { PasskeyConfiguredGuard } from '../src/passkey/passkey-configured.guard';
 
 describe('relying party validation', () => {
+  describe.each(['dev', 'loc'] as const)('%s production RP ancestor protection', (environment) => {
+    it.each([
+      ['dfx.swiss', 'https://dfx.swiss'],
+      ['swiss', 'https://swiss'],
+    ])('refuses production RP ID ancestor %s', (rpId, origin) => {
+      expect(evaluateRelyingParty(environment, rpId, origin).configured).toBe(false);
+    });
+  });
+
   it('rejects trailing-dot production rp ids on dev and loc', () => {
     for (const environment of ['dev', 'loc'] as const) {
       for (const rpId of ['app.dfx.swiss.', 'stg.app.dfx.swiss.', 'dev.app.dfx.swiss.']) {
