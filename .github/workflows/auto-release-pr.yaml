@@ -1,0 +1,70 @@
+name: Auto Release PR
+
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: auto-release-pr
+  cancel-in-progress: false
+
+jobs:
+  create-release-pr:
+    name: Create Release PR
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch main
+        run: git fetch origin main
+
+      - name: Create draft release PR when needed
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          bot='github-actions[bot]'
+          close_note='Closed: the pull request from develop into main is opened only by the Auto Release PR workflow, as github-actions[bot].'
+          open_prs=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls?state=open&base=main&head=${GITHUB_REPOSITORY_OWNER}:develop&per_page=100" --jq '.[] | "\(.number) \(.user.login)"')
+          bot_pr=""
+          while read -r number author; do
+            [ -n "${number}" ] || continue
+            if [ "${author}" = "${bot}" ]; then
+              bot_pr="${number}"
+              continue
+            fi
+            echo "Closing #${number}, opened by ${author}."
+            gh pr close "${number}" --repo "${GITHUB_REPOSITORY}" --comment "${close_note}"
+          done <<< "${open_prs}"
+          if [ -n "${bot_pr}" ]; then
+            echo "Release pull request #${bot_pr} from ${bot} is already open; skipping."
+            exit 0
+          fi
+          ahead=$(git rev-list --count origin/main..origin/develop)
+          if [ "$ahead" = "0" ]; then
+            echo "origin/main..origin/develop is empty; skipping."
+            exit 0
+          fi
+          body=$(printf '%s\n' \
+            'EN:' \
+            'Merging this pull request publishes the production image tag.' \
+            'That publish is a human decision.' \
+            'This draft only proposes merging develop into main.' \
+            '' \
+            '<details>' \
+            '<summary>Details</summary>' \
+            '' \
+            'The tag latest is published when this merge reaches main.' \
+            'Review the commits before merging.' \
+            'This workflow does not merge the pull request.' \
+            '' \
+            '</details>')
+          gh pr create --draft --base main --head develop --title "Release: develop -> main" --body "$body"

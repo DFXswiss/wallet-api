@@ -1,0 +1,32 @@
+# Pull requests into main must be opened by the Auto Release PR workflow (github-actions[bot]).
+# pull_request_target runs this file from the default branch, so a pull request cannot change the check that judges it. Never add a checkout or run pull request code here.
+# Do not add a YAML conditional on the job or on any step. A skipped check counts as passing.
+
+name: Release PR author
+
+on:
+  pull_request_target:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review, edited]
+
+permissions: {}
+
+jobs:
+  bot-author:
+    name: Release PR from the bot
+    runs-on: ubuntu-latest
+    steps:
+      - name: Reject any author other than github-actions[bot]
+        env:
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+        run: |
+          set -euo pipefail
+          if [ -z "${AUTHOR}" ]; then
+            echo "::error::Missing pull_request author; refusing to pass."
+            exit 1
+          fi
+          if [ "${AUTHOR}" != "github-actions[bot]" ]; then
+            echo "::error::Pull requests into main are opened by the Auto Release PR workflow only (got '${AUTHOR}'). Close this one and let the workflow open it."
+            exit 1
+          fi
+          echo "Author is github-actions[bot]."
