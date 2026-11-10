@@ -6,6 +6,22 @@ import { parseEnvironment } from '../src/config/environment';
 import { PasskeyConfiguredGuard } from '../src/passkey/passkey-configured.guard';
 
 describe('relying party validation', () => {
+  it('rejects trailing-dot production rp ids on dev and loc', () => {
+    for (const environment of ['dev', 'loc'] as const) {
+      for (const rpId of ['app.dfx.swiss.', 'stg.app.dfx.swiss.', 'dev.app.dfx.swiss.']) {
+        expect(evaluateRelyingParty(environment, rpId, `https://${rpId}`).configured).toBe(false);
+      }
+    }
+  });
+
+  it('rejects a trailing-dot origin hostname on dev', () => {
+    expect(evaluateRelyingParty('dev', 'dev.app.dfx.swiss', 'https://dev.app.dfx.swiss.').configured).toBe(false);
+  });
+
+  it('rejects an upper-case rp id', () => {
+    expect(evaluateRelyingParty('loc', 'LOCALHOST', 'http://localhost').configured).toBe(false);
+  });
+
   it('accepts the exact prd pair', () => {
     expect(evaluateRelyingParty('prd', 'app.dfx.swiss', 'https://app.dfx.swiss')).toEqual({
       configured: true,

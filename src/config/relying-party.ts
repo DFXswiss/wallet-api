@@ -19,6 +19,9 @@ function evaluateOrigin(rpId: string, origin: string, environment: WalletEnviron
   } catch {
     return false;
   }
+  if (parsed.hostname.endsWith('.')) {
+    return false;
+  }
   if (parsed.username || parsed.password) {
     return false;
   }
@@ -41,6 +44,9 @@ export function evaluateRelyingParty(
   }
   const environment = environmentInput;
   if (!rpIdInput || !originInput) {
+    return { configured: false };
+  }
+  if (rpIdInput.endsWith('.') || rpIdInput !== rpIdInput.toLowerCase()) {
     return { configured: false };
   }
 

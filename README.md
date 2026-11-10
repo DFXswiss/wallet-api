@@ -57,6 +57,8 @@ The HTTP server listens on `PORT` (default `3000`). Every public route has the p
 
 Passkey relying party settings are strict:
 
+RP ids and origin hosts are compared exactly, in lower case and without a trailing dot.
+
 - `prd` requires `app.dfx.swiss` and `https://app.dfx.swiss`.
 - `stg` requires `stg.app.dfx.swiss` and `https://stg.app.dfx.swiss`.
 - `dev` requires `dev.app.dfx.swiss` and `https://dev.app.dfx.swiss`, or another non-production RP id that is neither
