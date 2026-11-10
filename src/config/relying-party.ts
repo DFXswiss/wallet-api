@@ -19,9 +19,6 @@ function evaluateOrigin(rpId: string, origin: string, environment: WalletEnviron
   } catch {
     return false;
   }
-  if (parsed.hostname.endsWith('.')) {
-    return false;
-  }
   if (parsed.username || parsed.password) {
     return false;
   }
