@@ -110,10 +110,10 @@ Outbound HTTP clients sit behind injectable interfaces, so unit tests can run wi
 
 The container image is `dfxswiss/wallet-api`. `develop` publishes the tag `beta`, the `staging`
 branch publishes the tag `stg`, and `main` publishes the tag `latest`. Every run pushes the commit SHA
-tag; the channel tag moves only to the current head of the channel branch; a manual run publishes only
-from the channel's own branch. The image is built for linux/arm64 only. The container runs the
-application's own configuration check before the migrations, then listens. A failed check or migration
-does not listen.
+tag; each run points the channel tag at the image of the branch's current head once that image exists;
+a manual run publishes only from the channel's own branch. The image is built for linux/arm64 only.
+The container runs the application's own configuration check before the migrations, then listens. A
+failed check or migration does not listen.
 
 ## Breez SDK key
 

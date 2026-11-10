@@ -55,53 +55,58 @@ jobs:
       group: wallet-api-image-beta
       cancel-in-progress: false
     steps:
-      - name: Check branch tip
-        id: tip
+      - name: Resolve branch head
+        id: head
         env:
-          GITHUB_SHA: ${{ github.sha }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
           BRANCH: develop
-          TAG: ${{ env.TAG }}
         run: |
           set -euo pipefail
-          REMOTE_SHA="$(git ls-remote "https://github.com/${GITHUB_REPOSITORY}.git" "refs/heads/${BRANCH}" | awk '{print $1}')"
-          if [ -z "${REMOTE_SHA}" ]; then
+          HEAD_SHA="$(git ls-remote "https://github.com/${GITHUB_REPOSITORY}.git" "refs/heads/${BRANCH}" | awk '{print $1}')"
+          if [ -z "${HEAD_SHA}" ]; then
             echo "::error::Could not resolve refs/heads/${BRANCH}"
             exit 1
           fi
-          if [ "${REMOTE_SHA}" = "${GITHUB_SHA}" ]; then
-            echo "promote=true" >> "${GITHUB_OUTPUT}"
-          else
-            echo "promote=false" >> "${GITHUB_OUTPUT}"
-            echo "::notice::Run ${GITHUB_SHA} is superseded by ${REMOTE_SHA}; the ${TAG} tag stays unchanged"
-          fi
+          echo "sha=${HEAD_SHA}" >> "${GITHUB_OUTPUT}"
 
       - name: Log in to Docker Hub
-        if: steps.tip.outputs.promote == 'true'
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
       - name: Set up Docker Buildx
-        if: steps.tip.outputs.promote == 'true'
         uses: docker/setup-buildx-action@v3
 
+      - name: Check head image
+        id: image
+        env:
+          IMAGE: ${{ env.IMAGE }}
+          HEAD_SHA: ${{ steps.head.outputs.sha }}
+        run: |
+          set -euo pipefail
+          if docker buildx imagetools inspect "${IMAGE}:${HEAD_SHA}" >/dev/null 2>&1; then
+            echo "promote=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "promote=false" >> "${GITHUB_OUTPUT}"
+            echo "::notice::The image of head ${HEAD_SHA} is not pushed yet; its own run will promote it"
+          fi
+
       - name: Promote channel tag
-        if: steps.tip.outputs.promote == 'true'
+        if: steps.image.outputs.promote == 'true'
         env:
           IMAGE: ${{ env.IMAGE }}
           TAG: ${{ env.TAG }}
-          GITHUB_SHA: ${{ github.sha }}
+          HEAD_SHA: ${{ steps.head.outputs.sha }}
         run: |
           set -euo pipefail
-          docker buildx imagetools create --tag "${IMAGE}:${TAG}" "${IMAGE}:${GITHUB_SHA}"
+          docker buildx imagetools create --tag "${IMAGE}:${TAG}" "${IMAGE}:${HEAD_SHA}"
 
       - name: Notify infrastructure
-        if: steps.tip.outputs.promote == 'true'
+        if: steps.image.outputs.promote == 'true'
         env:
           GH_TOKEN: ${{ secrets.DISPATCH_TOKEN }}
           DISPATCH_REPO: ${{ secrets.DISPATCH_REPO }}
+          HEAD_SHA: ${{ steps.head.outputs.sha }}
         run: |
           set -euo pipefail
           if [ -z "${GH_TOKEN}" ] || [ -z "${DISPATCH_REPO}" ]; then
@@ -112,4 +117,4 @@ jobs:
             -f event_type=image-published \
             -f "client_payload[image]=${IMAGE}" \
             -f "client_payload[tag]=${TAG}" \
-            -f "client_payload[sha]=${GITHUB_SHA}"
+            -f "client_payload[sha]=${HEAD_SHA}"
