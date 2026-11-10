@@ -84,12 +84,30 @@ jobs:
           HEAD_SHA: ${{ steps.head.outputs.sha }}
         run: |
           set -euo pipefail
-          if docker buildx imagetools inspect "${IMAGE}:${HEAD_SHA}" >/dev/null 2>&1; then
+          if [ "${HEAD_SHA}" = "${GITHUB_SHA}" ]; then
             echo "promote=true" >> "${GITHUB_OUTPUT}"
-          else
-            echo "promote=false" >> "${GITHUB_OUTPUT}"
-            echo "::notice::The image of head ${HEAD_SHA} is not pushed yet; its own run will promote it"
+            exit 0
           fi
+
+          for attempt in 1 2 3; do
+            if output="$(docker buildx imagetools inspect "${IMAGE}:${HEAD_SHA}" 2>&1)"; then
+              echo "promote=true" >> "${GITHUB_OUTPUT}"
+              exit 0
+            fi
+
+            if printf '%s\n' "${output}" | grep -qiE 'not found|manifest unknown'; then
+              echo "promote=false" >> "${GITHUB_OUTPUT}"
+              echo "::notice::The image of head ${HEAD_SHA} is not pushed yet; its own run will promote it"
+              exit 0
+            fi
+
+            if [ "${attempt}" -lt 3 ]; then
+              sleep 10
+            fi
+          done
+
+          echo "::error::Could not inspect image ${IMAGE}:${HEAD_SHA}: ${output}"
+          exit 1
 
       - name: Promote channel tag
         if: steps.image.outputs.promote == 'true'
