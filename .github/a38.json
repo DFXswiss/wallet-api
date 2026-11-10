@@ -117,6 +117,16 @@
       "workflow": ".github/workflows/ensure-branches.yml",
       "job": "ensure",
       "reason": "Creates the develop and staging refs when they are absent. It is housekeeping, not an author test."
+    },
+    {
+      "workflow": ".github/workflows/auto-release-pr.yaml",
+      "job": "create-release-pr",
+      "reason": "Opens a draft pull request from develop to main. It is not an author test."
+    },
+    {
+      "workflow": ".github/workflows/release-pr-author.yml",
+      "job": "bot-author",
+      "reason": "Checks that pull requests into main are opened by github-actions[bot]. It is not an author test."
     }
   ]
 }
