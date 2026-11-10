@@ -1,11 +1,13 @@
 # Pull requests into main must come from this repository's develop branch.
 # There is no native source-branch restriction; this job is the gate.
+# The gate uses pull_request_target so a pull request cannot change the definition that judges it.
+# It checks out nothing and only reads the event's head metadata.
 # Do not add a YAML conditional on the job or on any step. A skipped check counts as passing.
 
 name: Main source branch
 
 on:
-  pull_request:
+  pull_request_target:
     branches:
       - main
     types:
