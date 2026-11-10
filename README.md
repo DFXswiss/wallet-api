@@ -106,6 +106,15 @@ npm start
 
 Outbound HTTP clients sit behind injectable interfaces, so unit tests can run without opening sockets.
 
+## Image
+
+The container image is `dfxswiss/wallet-api`. `develop` publishes the tag `beta`, the `staging`
+branch publishes the tag `stg`, and `main` publishes the tag `latest`. Every run pushes the commit SHA
+tag; each run points the channel tag at the image of the branch's current head once that image exists;
+a manual run publishes only from the channel's own branch. The image is built for linux/arm64 only.
+The container runs the application's own configuration check before the migrations, then listens. A
+failed check or migration does not listen.
+
 ## Breez SDK key
 
 This service does not read `WALLET_BREEZ_API_KEY`. Wallet API configuration stays the required and optional

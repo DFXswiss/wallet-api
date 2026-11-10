@@ -127,6 +127,41 @@
       "workflow": ".github/workflows/release-pr-author.yml",
       "job": "bot-author",
       "reason": "Checks that pull requests into main are opened by github-actions[bot]. It is not an author test."
+    },
+    {
+      "workflow": ".github/workflows/wallet-api-dev.yml",
+      "job": "build-and-push",
+      "reason": "Publishes the develop container image by its commit SHA. It is not an author test."
+    },
+    {
+      "workflow": ".github/workflows/wallet-api-dev.yml",
+      "job": "promote",
+      "reason": "Points the beta tag at the image of the current develop head. It is not an author test."
+    },
+    {
+      "workflow": ".github/workflows/wallet-api-stg.yml",
+      "job": "build-and-push",
+      "reason": "Publishes the staging container image by its commit SHA. It is not an author test."
+    },
+    {
+      "workflow": ".github/workflows/wallet-api-stg.yml",
+      "job": "promote",
+      "reason": "Points the stg tag at the image of the current staging head. It is not an author test."
+    },
+    {
+      "workflow": ".github/workflows/wallet-api-prd.yml",
+      "job": "build-and-push",
+      "reason": "Publishes the production container image by its commit SHA. It is not an author test."
+    },
+    {
+      "workflow": ".github/workflows/wallet-api-prd.yml",
+      "job": "promote",
+      "reason": "Points the latest tag at the image of the current main head. It is not an author test."
+    },
+    {
+      "workflow": ".github/workflows/main-from-develop.yml",
+      "job": "only-develop",
+      "reason": "Checks that pull requests into main come from develop. It is not an author test."
     }
   ]
 }

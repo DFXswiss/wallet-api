@@ -1,0 +1,49 @@
+# Pull requests into main must come from this repository's develop branch.
+# There is no native source-branch restriction; this job is the gate.
+# The gate uses pull_request_target so a pull request cannot change the definition that judges it.
+# It checks out nothing and only reads the event's head metadata.
+# Do not add a YAML conditional on the job or on any step. A skipped check counts as passing.
+
+name: Main source branch
+
+on:
+  pull_request_target:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+      - edited
+      - labeled
+      - unlabeled
+
+permissions:
+  contents: read
+
+jobs:
+  only-develop:
+    name: Main only from develop
+    runs-on: ubuntu-latest
+    steps:
+      - name: Reject any head other than this repo's develop
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          THIS_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if [ -z "$HEAD_REF" ] || [ -z "$HEAD_REPO" ] || [ -z "$THIS_REPO" ]; then
+            echo "::error::Missing pull_request head metadata; refusing to pass."
+            exit 1
+          fi
+          if [ "$HEAD_REPO" != "$THIS_REPO" ]; then
+            echo "::error::PRs into main must come from ${THIS_REPO}@develop, not a fork (${HEAD_REPO})."
+            exit 1
+          fi
+          if [ "$HEAD_REF" != "develop" ]; then
+            echo "::error::PRs into main must come from develop (got '${HEAD_REF}'). Merge into develop first."
+            exit 1
+          fi
+          echo "Head is ${THIS_REPO}@develop."
