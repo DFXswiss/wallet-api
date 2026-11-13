@@ -25,7 +25,8 @@ person does not open it. On the next push to `develop`, the workflow closes a re
 and opens its own. The check "Release PR from the bot" fails any other author.
 
 A38 is the review and local CI standard. The job inventory is `.github/a38.json`. The branch scope is
-`.github/pr-guard.json`. Because `main` is the default branch, the guard enforces `main` and `develop`.
+`.github/pr-guard.json`. The guard enforces A38 on pull requests into `develop`. `main` is excluded: its only
+pull request is the release pull request from `develop`, which carries changes that already passed A38 on `develop`.
 
 The standard is pinned at
 <https://github.com/DFXswiss/agent/blob/dbd5aeac2565a6414456c4640a762df1ac046cf9/docs/a38.md>.
