@@ -57,10 +57,16 @@ The HTTP server listens on `PORT` (default `3000`). Every public route has the p
 
 Passkey relying party settings are strict:
 
+RP ids and origin hosts are compared exactly, in lower case and without a trailing dot.
+
 - `prd` requires `app.dfx.swiss` and `https://app.dfx.swiss`.
 - `stg` requires `stg.app.dfx.swiss` and `https://stg.app.dfx.swiss`.
-- `dev` and `loc` require a non-production RP id and an origin whose hostname is that RP id. HTTPS is required; `loc`
-  may use HTTP.
+- `dev` requires an RP id that is neither `app.dfx.swiss`, nor a host under it, nor a parent domain of it
+  (`dfx.swiss`, `swiss`) and an HTTPS origin whose hostname is that RP id. It additionally accepts exactly
+  `dev.app.dfx.swiss` with `https://dev.app.dfx.swiss`.
+- `loc` requires an RP id that is neither `app.dfx.swiss`, nor a host under it, nor a parent domain of it
+  (`dfx.swiss`, `swiss`) and an origin whose hostname is that RP id. HTTPS or HTTP may be used.
+  `dev.app.dfx.swiss` is not accepted.
 
 Session tokens are HMAC-signed JWTs with issuer `wallet-api`, audience `wallet`, and a 12-hour lifetime. Revoking a
 credential locks that row before the clock is read. The same timestamp invalidates tokens issued in that second or
