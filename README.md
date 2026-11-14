@@ -96,8 +96,8 @@ The compose file contains only this service's Postgres instance, with database `
 
 - `develop` is the integration branch. Pull requests target `develop` once that branch exists.
 - `staging` is the pre-production line. The `staging-from-main.yml` workflow moves it, and nothing else does: every
-  new `main` head is fast-forwarded onto `staging`, and that run then starts the `stg` build. Pull requests never
-  target `staging`.
+  new `main` head is fast-forwarded onto `staging`, and that run then starts the `stg` build even when `staging`
+  already points at that head. Pull requests never target `staging`.
 - `main` is the release line. A push to `main` creates `develop` and `staging` when they are absent.
 
 ## Development
@@ -118,8 +118,9 @@ Outbound HTTP clients sit behind injectable interfaces, so unit tests can run wi
 
 The container image is `dfxswiss/wallet-api`. `develop` publishes the tag `beta`, the `staging`
 branch publishes the tag `stg`, and `main` publishes the tag `latest`. The `staging-from-main.yml` workflow keeps
-`staging` at every new `main` head as a fast-forward and starts the `stg` build for it. Every run pushes the commit SHA
-tag; each run points the channel tag at the image of the branch's current head once that image exists;
+`staging` at every new `main` head as a fast-forward and starts the `stg` build for it, including when `staging`
+already points at the head. Every run pushes the commit SHA tag; each run points the channel tag at the image of the
+branch's current head once that image exists;
 a manual run publishes only from the channel's own branch. The image is built for linux/arm64 only.
 The container runs the application's own configuration check before the migrations, then listens. A
 failed check or migration does not listen.

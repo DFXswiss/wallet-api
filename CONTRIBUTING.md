@@ -19,8 +19,9 @@ request that moves the seed or the private key into this service is incomplete.
 
 The repository starts with `main` only. The workflow on `main` creates `develop` and `staging` when those refs are
 absent. The `staging-from-main.yml` workflow moves `staging`, and nothing else does: it fast-forwards `staging` to every
-new `main` head and then starts the `stg` build. Pull requests never target `staging`. The pull request that introduces
-that workflow targets `main`. Later pull requests target `develop`.
+new `main` head and then starts the `stg` build, including when `staging` already points at the head. Pull requests
+never target `staging`. The pull request that introduces that workflow targets `main`. Later pull requests target
+`develop`.
 
 The pull request from `develop` into `main` is opened only by the Auto Release PR workflow, as `github-actions[bot]`. A
 person does not open it. On the next push to `develop`, the workflow closes a release pull request that a person opened
