@@ -98,7 +98,7 @@ The compose file contains only this service's Postgres instance, with database `
 - `staging` is the pre-production line. The `staging-from-main.yml` workflow moves it, and nothing else does: every
   new `main` head is fast-forwarded onto `staging`, and that run then starts the `stg` build even when `staging`
   already points at that head. Pull requests never target `staging`.
-- `main` is the release line. A push to `main` creates `develop` and `staging` when they are absent.
+- `main` is the release line. A push to `main` creates `develop` when it is absent.
 
 ## Development
 

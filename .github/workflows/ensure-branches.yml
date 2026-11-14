@@ -18,7 +18,7 @@ jobs:
           REPOSITORY: ${{ github.repository }}
           SOURCE_SHA: ${{ github.sha }}
         run: |
-          for branch in develop staging; do
+          for branch in develop; do
             if gh api "repos/${REPOSITORY}/git/ref/heads/${branch}" >/dev/null 2>&1; then
               echo "${branch} already exists"
               continue
