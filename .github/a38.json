@@ -116,7 +116,7 @@
     {
       "workflow": ".github/workflows/ensure-branches.yml",
       "job": "ensure",
-      "reason": "Creates the develop and staging refs when they are absent. It is housekeeping, not an author test."
+      "reason": "Creates the develop ref when it is absent. It is housekeeping, not an author test."
     },
     {
       "workflow": ".github/workflows/auto-release-pr.yaml",
