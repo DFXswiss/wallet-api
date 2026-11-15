@@ -3,7 +3,6 @@ name: Staging from main
 on:
   push:
     branches: [main]
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -20,17 +19,6 @@ jobs:
       contents: write
       actions: write
     steps:
-      - name: Check dispatch ref
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          REF: ${{ github.ref }}
-        run: |
-          set -euo pipefail
-          if [ "${EVENT_NAME}" = "workflow_dispatch" ] && [ "${REF}" != "refs/heads/main" ]; then
-            echo "::error::staging-from-main runs only from refs/heads/main (got '${REF}')."
-            exit 1
-          fi
-
       - name: Checkout
         uses: actions/checkout@v4
         with:
