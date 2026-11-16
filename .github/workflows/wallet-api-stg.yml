@@ -123,7 +123,7 @@ jobs:
           docker buildx imagetools create --tag "${IMAGE}:${TAG}" "${IMAGE}:${HEAD_SHA}"
 
       - name: Notify image publish endpoint
-        if: steps.image.outputs.promote == 'true' && github.event_name == 'push' && steps.head.outputs.sha == github.sha
+        if: steps.image.outputs.promote == 'true' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && steps.head.outputs.sha == github.sha
         env:
           IMAGE: ${{ env.IMAGE }}
           TAG: ${{ env.TAG }}
@@ -167,21 +167,3 @@ jobs:
               exit 1
               ;;
           esac
-
-      - name: Notify infrastructure
-        if: steps.image.outputs.promote == 'true' && github.event_name != 'push'
-        env:
-          GH_TOKEN: ${{ secrets.DISPATCH_TOKEN }}
-          DISPATCH_REPO: ${{ secrets.DISPATCH_REPO }}
-          HEAD_SHA: ${{ steps.head.outputs.sha }}
-        run: |
-          set -euo pipefail
-          if [ -z "${GH_TOKEN}" ] || [ -z "${DISPATCH_REPO}" ]; then
-            echo "::warning::DISPATCH_TOKEN or DISPATCH_REPO is empty; skipping image-published notification"
-            exit 0
-          fi
-          gh api "repos/${DISPATCH_REPO}/dispatches" \
-            -f event_type=image-published \
-            -f "client_payload[image]=${IMAGE}" \
-            -f "client_payload[tag]=${TAG}" \
-            -f "client_payload[sha]=${HEAD_SHA}"
