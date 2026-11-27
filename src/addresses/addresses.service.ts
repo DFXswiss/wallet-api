@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { walletError } from '../common/wallet-error';
+import { WalletFamilies, chainFamily } from '../config/wallet-families';
 import { PasskeyAddress } from '../entities/passkey-address.entity';
 import { UpsertAddressDto } from './addresses.dto';
 
@@ -11,9 +12,11 @@ export class AddressesService {
     @InjectRepository(PasskeyAddress)
     private readonly addresses: Repository<PasskeyAddress>,
     private readonly dataSource: DataSource,
+    private readonly families: WalletFamilies,
   ) {}
 
   async upsert(walletAccountId: string, dto: UpsertAddressDto) {
+    this.families.assertEnabled(chainFamily(dto.chain));
     const existing = await this.addresses.findOneBy({ walletAccountId, chain: dto.chain });
     if (existing) {
       if (existing.address !== dto.address) {
@@ -48,6 +51,9 @@ export class AddressesService {
       where: { walletAccountId },
       order: { chain: 'ASC' },
     });
-    return records.map((record) => ({ chain: record.chain, address: record.address }));
+    // Rows of a family that is off stay stored and are listed again once it is on.
+    return records
+      .filter((record) => this.families.isEnabled(chainFamily(record.chain)))
+      .map((record) => ({ chain: record.chain, address: record.address }));
   }
 }

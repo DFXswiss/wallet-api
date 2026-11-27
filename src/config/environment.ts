@@ -1,3 +1,5 @@
+import { WalletFamilySwitches, readWalletFamilies } from './wallet-families';
+
 export const WALLET_ENVIRONMENTS = ['prd', 'stg', 'dev', 'loc'] as const;
 
 export type WalletEnvironment = (typeof WALLET_ENVIRONMENTS)[number];
@@ -14,6 +16,7 @@ export type WalletRuntimeConfig = {
   databaseUrl: string;
   sessionSecret: string;
   port: number;
+  walletFamilies: WalletFamilySwitches;
 };
 
 export function readWalletRuntimeConfig(env: NodeJS.ProcessEnv = process.env): WalletRuntimeConfig {
@@ -30,7 +33,8 @@ export function readWalletRuntimeConfig(env: NodeJS.ProcessEnv = process.env): W
   if (!Number.isInteger(parsedPort) || parsedPort < 1 || parsedPort > 65535) {
     throw new Error('PORT must be an integer between 1 and 65535');
   }
-  return { environment, databaseUrl, sessionSecret, port: parsedPort };
+  const walletFamilies = readWalletFamilies(environment);
+  return { environment, databaseUrl, sessionSecret, port: parsedPort, walletFamilies };
 }
 
 export function isKnownEnvironment(value: unknown): value is WalletEnvironment {
@@ -38,7 +42,7 @@ export function isKnownEnvironment(value: unknown): value is WalletEnvironment {
 }
 
 export function validateEnvironment(config: Record<string, unknown>): Record<string, unknown> {
-  parseEnvironment(config.ENVIRONMENT);
+  readWalletFamilies(parseEnvironment(config.ENVIRONMENT));
   if (typeof config.DATABASE_URL !== 'string' || config.DATABASE_URL.length === 0) {
     throw new Error('DATABASE_URL is required');
   }
