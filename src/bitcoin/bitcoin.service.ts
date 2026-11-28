@@ -134,15 +134,13 @@ export class BitcoinService {
 
     const scripts = new Map(wallet.map((decoded) => [decoded.address, decoded.script]));
     const lists = await mapLimit(wallet, ESPLORA_CONCURRENCY, async ({ address }) =>
-      parseUtxos(await this.esploraJson(blockchain, `address/${address}/utxo`)).map(
-        (utxo): SelectableUtxo => ({
-          txid: utxo.txid,
-          vout: utxo.vout,
-          value: utxo.value,
-          address,
-          confirmed: utxo.confirmed,
-        }),
-      ),
+      parseUtxos(await this.esploraJson(blockchain, `address/${address}/utxo`)).map((utxo): SelectableUtxo => ({
+        txid: utxo.txid,
+        vout: utxo.vout,
+        value: utxo.value,
+        address,
+        confirmed: utxo.confirmed,
+      })),
     );
     const unique = new Map<string, SelectableUtxo>();
     lists.flat().forEach((utxo) => unique.set(`${utxo.txid}:${utxo.vout}`, utxo));

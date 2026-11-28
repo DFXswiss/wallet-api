@@ -129,7 +129,10 @@ function deviceSign(psbt: string, inputAddresses: string[], finalize = true): bt
 }
 
 function signedHex(prepared: { psbt: string; inputs: { address: string }[] }): string {
-  const tx = deviceSign(prepared.psbt, prepared.inputs.map((input) => input.address));
+  const tx = deviceSign(
+    prepared.psbt,
+    prepared.inputs.map((input) => input.address),
+  );
   return Buffer.from(tx.extract()).toString('hex');
 }
 
@@ -545,7 +548,11 @@ describe('submit', () => {
 
   it('accepts a signed PSBT and finalizes it', async () => {
     const { service, payment, posts } = await prepared();
-    const signed = deviceSign(payment.psbt, payment.inputs.map((input) => input.address), false);
+    const signed = deviceSign(
+      payment.psbt,
+      payment.inputs.map((input) => input.address),
+      false,
+    );
     const psbt = Buffer.from(signed.toPSBT()).toString('base64');
     const result = await service.submit(ACCOUNT, 'BitcoinRegtest', { prepareId: payment.prepareId, psbt });
     expect(result.txid).toBe(payment.txid);
