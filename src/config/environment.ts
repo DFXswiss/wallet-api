@@ -1,3 +1,4 @@
+import { assertEsploraRegtestConfig } from '../proxy/esplora-regtest';
 import { WalletFamilySwitches, readWalletFamilies } from './wallet-families';
 
 export const WALLET_ENVIRONMENTS = ['prd', 'stg', 'dev', 'loc'] as const;
@@ -34,6 +35,7 @@ export function readWalletRuntimeConfig(env: NodeJS.ProcessEnv = process.env): W
     throw new Error('PORT must be an integer between 1 and 65535');
   }
   const walletFamilies = readWalletFamilies(environment);
+  assertEsploraRegtestConfig(environment, env);
   return { environment, databaseUrl, sessionSecret, port: parsedPort, walletFamilies };
 }
 
@@ -42,12 +44,14 @@ export function isKnownEnvironment(value: unknown): value is WalletEnvironment {
 }
 
 export function validateEnvironment(config: Record<string, unknown>): Record<string, unknown> {
-  readWalletFamilies(parseEnvironment(config.ENVIRONMENT));
+  const environment = parseEnvironment(config.ENVIRONMENT);
+  readWalletFamilies(environment);
   if (typeof config.DATABASE_URL !== 'string' || config.DATABASE_URL.length === 0) {
     throw new Error('DATABASE_URL is required');
   }
   if (typeof config.WALLET_SESSION_SECRET !== 'string' || config.WALLET_SESSION_SECRET.length < 32) {
     throw new Error('WALLET_SESSION_SECRET must contain at least 32 characters');
   }
+  assertEsploraRegtestConfig(environment, config);
   return config;
 }

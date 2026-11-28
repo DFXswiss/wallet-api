@@ -48,7 +48,16 @@ Optional variables:
 
 - `PORT`: listening port, default `3000`.
 - `PASSKEY_RP_ID` and `PASSKEY_ORIGIN`: the WebAuthn relying party pair. Passkey routes return 503 until it is valid.
-- `ESPLORA_BASE_URLS`: a JSON object mapping a blockchain id to an HTTPS origin.
+- `ESPLORA_BASE_URLS`: a JSON object mapping a blockchain id to an HTTPS origin. A `BitcoinRegtest` key stops boot in
+  every environment; regtest has its own variable below.
+- `ESPLORA_REGTEST_URL`: the Esplora upstream for the blockchain id `BitcoinRegtest`, and its only source. The value
+  is an `http:` or `https:` origin with no path other than `/`, no credentials, no query, and no fragment, for example
+  `http://regtest-esplora.example:3000`. It is accepted on `stg`, `dev`, and `loc`; an invalid value stops boot. On
+  `prd`, setting it stops boot, and `BitcoinRegtest` always answers 404 `EsploraNotConfigured`. While it is unset,
+  `BitcoinRegtest` answers 404 `EsploraNotConfigured`, and a `BitcoinRegtest` key in `ESPLORA_BASE_URLS` is never
+  used. `BitcoinRegtest` belongs to the `bitcoin` family like every Esplora blockchain id: while `bitcoin` is off it
+  answers 403 `WalletFamilyDisabled` before any of these checks. Path, query, and transaction checks are the same as
+  for `ESPLORA_BASE_URLS`.
 - `EVM_RPC_URLS`: a JSON object mapping a chain id string to an HTTPS JSON-RPC URL.
 - `WALLET_PRICE_URL`: an HTTPS price source URL. Prices return 503 while it is unset.
 - `WALLET_PRICE_HOSTS`: comma-separated hosts permitted for `WALLET_PRICE_URL`.
@@ -86,7 +95,9 @@ and outbound requests. A JSON body that cannot be parsed is answered with 400 by
 The routes per family:
 
 - `bitcoin`: `GET /v1/wallet/esplora/:blockchain/*`, `POST /v1/wallet/esplora/:blockchain/tx`, and
-  `PUT /v1/wallet/addresses` with chain `bitcoin`.
+  `PUT /v1/wallet/addresses` with chain `bitcoin`. The Esplora routes belong to this family for every blockchain id,
+  including `BitcoinRegtest`; the family check comes before the upstream lookup, so an id without an upstream answers
+  403 rather than 404 while the family is off.
 - `spark`: `PUT /v1/wallet/addresses` with chain `spark`, `GET /v1/wallet/lnurl`, and
   `GET /v1/wallet/lightning-address/:address`. Lightning is paid only through Spark in this wallet.
 - `evm`: `POST /v1/wallet/evm/:chainId/rpc`, `GET /v1/wallet/ens/address`, `GET /v1/wallet/ens/name`, and
