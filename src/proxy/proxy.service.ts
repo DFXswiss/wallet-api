@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { walletError } from '../common/wallet-error';
+import { WalletFamilies } from '../config/wallet-families';
 import { HTTP_TRANSPORT, HttpTransport, OutboundResponse } from '../outbound/http-transport';
 import { isValidEsploraPath, isValidEsploraQuery, parseHttpsOriginMap, parseHttpsUrlMap } from './proxy-config';
 
@@ -30,6 +31,7 @@ export class ProxyService {
   constructor(
     private readonly config: ConfigService,
     @Inject(HTTP_TRANSPORT) private readonly transport: HttpTransport,
+    private readonly families: WalletFamilies,
   ) {}
 
   get esploraBases(): Record<string, string> {
@@ -41,6 +43,7 @@ export class ProxyService {
   }
 
   async esploraGet(blockchain: string, path: string, query = ''): Promise<OutboundResponse> {
+    this.families.assertEnabled('bitcoin');
     const base = configuredUrl(this.esploraBases, blockchain);
     if (!base) {
       throw walletError(404, 'EsploraNotConfigured');
@@ -62,6 +65,7 @@ export class ProxyService {
   }
 
   async esploraPostTransaction(blockchain: string, body: Buffer): Promise<OutboundResponse> {
+    this.families.assertEnabled('bitcoin');
     const base = configuredUrl(this.esploraBases, blockchain);
     if (!base) {
       throw walletError(404, 'EsploraNotConfigured');
@@ -80,6 +84,7 @@ export class ProxyService {
   }
 
   async evmRpc(chainId: string, body: JsonRpcRequest | JsonRpcRequest[]): Promise<unknown> {
+    this.families.assertEnabled('evm');
     const endpoint = configuredUrl(this.evmUrls, chainId);
     if (!endpoint) {
       throw walletError(404, 'EvmChainNotFound');

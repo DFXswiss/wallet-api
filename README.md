@@ -55,6 +55,47 @@ Optional variables:
 
 The HTTP server listens on `PORT` (default `3000`). Every public route has the path prefix `/v1/wallet`.
 
+### Wallet families
+
+Wallet API decides which chain families the passkey wallet offers. The app shows exactly what
+`GET /v1/wallet/config` returns. The route needs no session:
+
+```json
+{ "families": { "bitcoin": true, "spark": false, "evm": false } }
+```
+
+Every family is always present, as `true` (offered) or `false` (not offered). There is no other field.
+
+The switches are not environment variables. Each environment has its own file in this repository,
+`src/config/environments/<env>.ts`, selected by `ENVIRONMENT`. The process reads the file at boot. Every file must
+set `bitcoin`, `spark`, and `evm` to `true` or `false`. A missing switch, a value other than `true` or `false`, an
+unknown family, or a missing or unknown `ENVIRONMENT` stops boot before the migrations run. Changing a switch needs a
+reviewed pull request and a deploy. For the families, the deployment configuration only sets `ENVIRONMENT`.
+
+| Environment (`ENVIRONMENT`) | `bitcoin` | `spark` | `evm`   |
+| --------------------------- | --------- | ------- | ------- |
+| `prd`                       | `true`    | `false` | `false` |
+| `stg`                       | `true`    | `false` | `false` |
+| `dev`                       | `true`    | `false` | `false` |
+| `loc`                       | `true`    | `false` | `false` |
+
+While a family is off, its routes answer 403 with code `WalletFamilyDisabled`. The refusal comes before validation,
+lookups, database access, and outbound requests. `PUT /v1/wallet/addresses` checks the session first: without a valid
+session it answers 401. After the session check, the refusal comes before body validation, lookups, database access,
+and outbound requests. A JSON body that cannot be parsed is answered with 400 by the body parser before any of these checks.
+The routes per family:
+
+- `bitcoin`: `GET /v1/wallet/esplora/:blockchain/*`, `POST /v1/wallet/esplora/:blockchain/tx`, and
+  `PUT /v1/wallet/addresses` with chain `bitcoin`.
+- `spark`: `PUT /v1/wallet/addresses` with chain `spark`, `GET /v1/wallet/lnurl`, and
+  `GET /v1/wallet/lightning-address/:address`. Lightning is paid only through Spark in this wallet.
+- `evm`: `POST /v1/wallet/evm/:chainId/rpc`, `GET /v1/wallet/ens/address`, `GET /v1/wallet/ens/name`, and
+  `PUT /v1/wallet/addresses` with chain `ethereum`.
+
+`GET /v1/wallet/chains` and `GET /v1/wallet/addresses` leave out the entries of a family that is off. Stored addresses
+stay in the database and are listed again when their family is switched on. `GET /v1/wallet/prices` and
+`GET /v1/wallet/lists/:id` do not belong to a family.
+
 Passkey relying party settings are strict:
 
 RP ids and origin hosts are compared exactly, in lower case and without a trailing dot.

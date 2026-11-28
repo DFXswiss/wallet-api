@@ -2,14 +2,22 @@ import { Injectable } from '@nestjs/common';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { walletError } from '../common/wallet-error';
+import { WalletFamilies, isWalletFamily } from '../config/wallet-families';
 
 const LIST_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
 @Injectable()
 export class WalletDataService {
+  constructor(private readonly families: WalletFamilies) {}
+
+  // Only the chains of a family that is on; an entry without a known family is left out.
   async chains(): Promise<unknown[]> {
     const raw = await readFile(await this.resolveDataFile('chains.json'), 'utf8');
-    return JSON.parse(raw) as unknown[];
+    const chains = JSON.parse(raw) as unknown[];
+    return chains.filter((chain) => {
+      const family = chain && typeof chain === 'object' ? (chain as { family?: unknown }).family : undefined;
+      return isWalletFamily(family) && this.families.isEnabled(family);
+    });
   }
 
   async list(id: string): Promise<unknown> {

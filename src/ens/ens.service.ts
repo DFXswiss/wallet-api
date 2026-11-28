@@ -1,5 +1,6 @@
 import { HttpException, Injectable } from '@nestjs/common';
 import { walletError } from '../common/wallet-error';
+import { WalletFamilies } from '../config/wallet-families';
 import { ProxyService } from '../proxy/proxy.service';
 import {
   ENS_REGISTRY_ADDRESS,
@@ -34,9 +35,13 @@ function requireRpcEnvelope(value: unknown): unknown {
 
 @Injectable()
 export class EnsService {
-  constructor(private readonly proxy: ProxyService) {}
+  constructor(
+    private readonly proxy: ProxyService,
+    private readonly families: WalletFamilies,
+  ) {}
 
   async address(name: string | undefined): Promise<{ address: string | null }> {
+    this.families.assertEnabled('evm');
     this.requireRpc();
     const node = namehash(requireEnsName(name));
     const resolver = await this.resolverFor(node);
@@ -51,6 +56,7 @@ export class EnsService {
   }
 
   async name(address: string | undefined): Promise<{ name: string | null }> {
+    this.families.assertEnabled('evm');
     this.requireRpc();
     if (!address || !ADDRESS_PATTERN.test(address)) {
       throw walletError(400, 'EnsAddressInvalid');
