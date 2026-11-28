@@ -94,7 +94,8 @@ lookups, database access, and outbound requests. `PUT /v1/wallet/addresses` chec
 session it answers 401. After the session check, the refusal comes before body validation, lookups, database access,
 and outbound requests. The `/v1/wallet/bitcoin/:blockchain/*` routes check the family first: while `bitcoin` is off
 they answer 403 even without a session or with an invalid one, and no session lookup happens. A JSON body that cannot
-be parsed is answered with 400 by the body parser before any of these checks.
+be parsed is answered with 400, and one larger than 1 MB with 413 `PayloadTooLarge`, by the body parser before any of
+these checks.
 The routes per family:
 
 - `bitcoin`: `GET /v1/wallet/esplora/:blockchain/*`, `POST /v1/wallet/esplora/:blockchain/tx`,
@@ -157,8 +158,8 @@ This service prepares Bitcoin payments; the device signs them. The device derive
 them with each request, signs the returned PSBT with the key of each input's address, and returns the signed payment.
 Seeds and private keys never reach this service.
 
-Every route is `/v1/wallet/bitcoin/:blockchain/...` and belongs to the `bitcoin` wallet family: while it is off, every
-route answers 403 `WalletFamilyDisabled` before the session check, validation, the blockchain lookup, database access,
+Every route is `/v1/wallet/bitcoin/:blockchain/...` and belongs to the `bitcoin` wallet family: while it is off, after the
+body parser (400 unparseable JSON, 413 body over 1 MB), every route answers 403 `WalletFamilyDisabled` before the session check, validation, the blockchain lookup, database access,
 and any Esplora request. While it is on, every route requires a wallet session (`Authorization: Bearer <token>`).
 `:blockchain` is `Bitcoin`, `BitcoinTestnet4`, or `BitcoinRegtest`, and only when its Esplora upstream is configured:
 `ESPLORA_BASE_URLS` for the first two, `ESPLORA_REGTEST_URL` for regtest, which is never available on `prd`. Any other
