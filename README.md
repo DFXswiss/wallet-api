@@ -93,9 +93,13 @@ While a family is off, its routes answer 403 with code `WalletFamilyDisabled`. T
 lookups, database access, and outbound requests. `PUT /v1/wallet/addresses` checks the session first: without a valid
 session it answers 401. After the session check, the refusal comes before body validation, lookups, database access,
 and outbound requests. The `/v1/wallet/bitcoin/:blockchain/*` routes check the family first: while `bitcoin` is off
-they answer 403 even without a session or with an invalid one, and no session lookup happens. A JSON body that cannot
-be parsed is answered with 400, and one larger than 1 MB with 413 `PayloadTooLarge`, by the body parser before any of
-these checks.
+they answer 403 even without a session or with an invalid one, and no session lookup happens. The body parsers run
+before any of these checks. On every route except `POST /v1/wallet/esplora/:blockchain/tx`, a JSON
+(`application/json`) or form (`application/x-www-form-urlencoded`) body that cannot be parsed is answered with 400,
+and one larger than 1 MB with 413 `PayloadTooLarge`. A body of any other content type, or without a content type, is
+not read by these parsers and gets neither answer, whatever its size. `POST /v1/wallet/esplora/:blockchain/tx` is
+chosen by its URL alone, whatever its content type: its body is read raw up to 10 MB, is never parsed as JSON, and
+answers 413 `PayloadTooLarge` only above 10 MB.
 The routes per family:
 
 - `bitcoin`: `GET /v1/wallet/esplora/:blockchain/*`, `POST /v1/wallet/esplora/:blockchain/tx`,
@@ -159,7 +163,8 @@ them with each request, signs the returned PSBT with the key of each input's add
 Seeds and private keys never reach this service.
 
 Every route is `/v1/wallet/bitcoin/:blockchain/...` and belongs to the `bitcoin` wallet family: while it is off, after the
-body parser (400 unparseable JSON, 413 body over 1 MB), every route answers 403 `WalletFamilyDisabled` before the session check, validation, the blockchain lookup, database access,
+body parser (a JSON or form body that cannot be parsed answers 400, one over 1 MB answers 413 `PayloadTooLarge`;
+a body of another content type is not read by the parser and is not checked for size), every route answers 403 `WalletFamilyDisabled` before the session check, validation, the blockchain lookup, database access,
 and any Esplora request. While it is on, every route requires a wallet session (`Authorization: Bearer <token>`).
 `:blockchain` is `Bitcoin`, `BitcoinTestnet4`, or `BitcoinRegtest`, and only when its Esplora upstream is configured:
 `ESPLORA_BASE_URLS` for the first two, `ESPLORA_REGTEST_URL` for regtest, which is never available on `prd`. Any other
@@ -173,8 +178,10 @@ type (for example a number for `amount`, a string for `historyLimit`, or a non-s
 400 `BadRequest`, and `message` is then an array of validation messages. An optional field may be left out, but JSON
 `null` is a wrong JSON type on every field, optional ones included: `null` never means "not given" or "use the
 default" and also answers 400 `BadRequest`. Second, the service checks count, format, and
-range and answers the documented codes below, also over HTTP. Unknown fields are dropped. A request body larger than
-1 MB is refused before both steps with 413 `PayloadTooLarge`; every size limit documented below fits within 1 MB.
+range and answers the documented codes below, also over HTTP. Unknown fields are dropped. A JSON or form request body larger
+than 1 MB is refused before both steps with 413 `PayloadTooLarge`; every size limit documented below fits within 1 MB.
+A body of another content type, or without a content type, is not read and gets no 413; the route then sees an empty
+body and answers 400 `BadRequest` for the missing required fields.
 
 ### `POST account`
 
@@ -300,7 +307,7 @@ Errors:
 - 404 `EsploraNotConfigured`: unknown or unconfigured `:blockchain`.
 - 404 `PrepareNotFound`: `prepareId` is not a UUID, unknown, deleted, or another wallet's or another blockchain's id.
 - 410 `PrepareExpired`.
-- 413 `PayloadTooLarge`: request body larger than 1 MB.
+- 413 `PayloadTooLarge`: JSON or form request body larger than 1 MB.
 - 422 `TransactionMismatch`: the transaction's txid differs from the prepared one.
 - 422 `BroadcastRejected`: the node refused the transaction; the prepared payment stays submittable until it expires.
 - 502 `OutboundRequestFailed`: Esplora failed, or answered 2xx without exactly the prepared txid; the prepared payment
