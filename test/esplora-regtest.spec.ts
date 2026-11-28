@@ -1,4 +1,3 @@
-import { ConfigService } from '@nestjs/config';
 import { readWalletRuntimeConfig, validateEnvironment } from '../src/config/environment';
 import {
   assertEsploraRegtestConfig,
@@ -6,6 +5,7 @@ import {
   resolveEsploraRegtestOrigin,
 } from '../src/proxy/esplora-regtest';
 import { ProxyService } from '../src/proxy/proxy.service';
+import { isolatedConfig } from './bitcoin-fixtures';
 import { allFamiliesOff, launchFamilies } from './wallet-families.fixtures';
 
 const REGTEST_HTTP = 'http://regtest-esplora.example:3000';
@@ -27,7 +27,7 @@ function okTransport() {
 }
 
 function service(values: Record<string, string>, transport = okTransport(), families = launchFamilies()) {
-  return { proxy: new ProxyService(new ConfigService(values), transport as any, families), transport };
+  return { proxy: new ProxyService(isolatedConfig(values), transport as any, families), transport };
 }
 
 describe('ESPLORA_REGTEST_URL parsing', () => {

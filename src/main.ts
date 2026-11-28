@@ -6,11 +6,13 @@ import { json, raw, urlencoded } from 'express';
 import type { IncomingMessage } from 'node:http';
 import { AppModule } from './app.module';
 import { WalletExceptionFilter, walletParserErrorMiddleware } from './common/wallet-exception.filter';
+import { configureCors } from './config/cors';
 import { readWalletRuntimeConfig } from './config/environment';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule, { bodyParser: false });
   const runtime = readWalletRuntimeConfig();
+  configureCors(app, runtime.environment, process.env.PASSKEY_ORIGIN);
   app.use(
     raw({
       type: (request: IncomingMessage) => /\/wallet\/esplora\/[^/?]+\/tx$/.test((request.url ?? '').split('?')[0]),
