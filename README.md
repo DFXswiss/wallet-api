@@ -67,10 +67,10 @@ Wallet API decides which chain families the passkey wallet offers. The app shows
 Every family is always present, as `true` (offered) or `false` (not offered). There is no other field.
 
 The switches are not environment variables. Each environment has its own file in this repository,
-`src/config/environments/<env>.ts`, selected by `ENVIRONMENT`. The process reads the file once at boot. Every file must
+`src/config/environments/<env>.ts`, selected by `ENVIRONMENT`. The process reads the file at boot. Every file must
 set `bitcoin`, `spark`, and `evm` to `true` or `false`. A missing switch, a value other than `true` or `false`, an
 unknown family, or a missing or unknown `ENVIRONMENT` stops boot before the migrations run. Changing a switch needs a
-reviewed pull request and a deploy. The deployment configuration only sets `ENVIRONMENT`.
+reviewed pull request and a deploy. For the families, the deployment configuration only sets `ENVIRONMENT`.
 
 | Environment (`ENVIRONMENT`) | `bitcoin` | `spark` | `evm`   |
 | --------------------------- | --------- | ------- | ------- |
@@ -80,7 +80,10 @@ reviewed pull request and a deploy. The deployment configuration only sets `ENVI
 | `loc`                       | `true`    | `false` | `false` |
 
 While a family is off, its routes answer 403 with code `WalletFamilyDisabled`. The refusal comes before validation,
-lookups, and outbound requests:
+lookups, database access, and outbound requests. `PUT /v1/wallet/addresses` checks the session first: without a valid
+session it answers 401. After the session check, the refusal comes before body validation, lookups, database access,
+and outbound requests. A JSON body that cannot be parsed is answered with 400 by the body parser before any of these checks.
+The routes per family:
 
 - `bitcoin`: `GET /v1/wallet/esplora/:blockchain/*`, `POST /v1/wallet/esplora/:blockchain/tx`, and
   `PUT /v1/wallet/addresses` with chain `bitcoin`.

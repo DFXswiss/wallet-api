@@ -22,6 +22,11 @@ export function chainFamily(chain: WalletChainId): WalletFamily {
   return CHAIN_FAMILIES[chain];
 }
 
+// True only for a stored address chain this service knows, never for an inherited key such as "__proto__".
+export function isWalletChainId(value: unknown): value is WalletChainId {
+  return typeof value === 'string' && Object.hasOwn(CHAIN_FAMILIES, value);
+}
+
 export function isWalletFamily(value: unknown): value is WalletFamily {
   return typeof value === 'string' && (WALLET_FAMILIES as readonly string[]).includes(value);
 }
@@ -73,7 +78,8 @@ export class WalletFamilies {
     return this.switches[family] === true;
   }
 
-  // Refuses a request of a family that is off, before any validation, lookup or outbound request.
+  // Refuses a request of a family that is off. Callers place it before any lookup or outbound request; on
+  // PUT /v1/wallet/addresses the AddressFamilyGuard calls it before the ValidationPipe as well.
   assertEnabled(family: WalletFamily): void {
     if (!this.isEnabled(family)) {
       throw WalletErrors.walletFamilyDisabled();

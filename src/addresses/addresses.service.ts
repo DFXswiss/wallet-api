@@ -16,6 +16,8 @@ export class AddressesService {
   ) {}
 
   async upsert(walletAccountId: string, dto: UpsertAddressDto) {
+    // Defence in depth: AddressFamilyGuard already refuses this over HTTP; this keeps any other caller of the
+    // service from writing an address of a family that is off.
     this.families.assertEnabled(chainFamily(dto.chain));
     const existing = await this.addresses.findOneBy({ walletAccountId, chain: dto.chain });
     if (existing) {
