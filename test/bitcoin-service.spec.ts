@@ -600,7 +600,10 @@ describe('submit', () => {
     store.rows.get(kept.prepareId).expiresAt = new Date(Date.now() - PREPARE_RETENTION_MS + 60_000);
     store.sweeps = [];
 
-    await service.submit(ACCOUNT, 'BitcoinRegtest', { prepareId: payment.prepareId, transactionHex: signedHex(payment) });
+    await service.submit(ACCOUNT, 'BitcoinRegtest', {
+      prepareId: payment.prepareId,
+      transactionHex: signedHex(payment),
+    });
     expect(store.sweeps).toHaveLength(1);
     expect(store.rows.has(old.prepareId)).toBe(false);
     expect(store.rows.has(kept.prepareId)).toBe(true);
