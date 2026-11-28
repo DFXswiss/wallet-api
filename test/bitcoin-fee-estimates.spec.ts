@@ -28,7 +28,10 @@ describe('fee estimates', () => {
     expect(roundUpRate(1)).toBe(1);
     expect(roundUpRate(1.004)).toBe(1);
     expect(roundUpRate(1.05)).toBe(1);
+    expect(roundUpRate(1.0501)).toBe(2);
     expect(roundUpRate(1.06)).toBe(2);
+    expect(roundUpRate(2.05)).toBe(2);
+    expect(roundUpRate(2.0501)).toBe(3);
     expect(roundUpRate(8.2)).toBe(9);
     expect(roundUpRate(15)).toBe(15);
   });

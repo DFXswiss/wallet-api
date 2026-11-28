@@ -201,7 +201,8 @@ Errors:
 
 Response 200: `{ blockchain, source, unit: "sat/vB", rates: { fast, normal, slow } }`. Rates are integers taken from
 Esplora `fee-estimates` for the targets 1, 6, and 144 blocks (the next target above, or the largest present), rounded
-up after dropping fractions up to 0.05 sat/vB, at least 1, and with `fast >= normal >= slow`.
+up after subtracting 0.05 sat/vB (`ceil(rate - 0.05)`, no further rounding: 1.05 gives 1, 1.0501 gives 2), at least 1,
+and with `fast >= normal >= slow`.
 
 When Esplora answers with no estimate (regtest usually answers `{}`), `BitcoinTestnet4` and `BitcoinRegtest` use the
 fallback `{ fast: 3, normal: 2, slow: 1 }` with `source: "fallback"`, outside `prd` only. `Bitcoin` has no fallback in any
@@ -264,14 +265,18 @@ PSBT in base64, finalized or not; this service finalizes it, which needs no key)
 
 The signed transaction must have the prepared `txid`. P2WPKH signatures sit in the witness, which the txid does not
 cover, so the txid is equal exactly when the transaction spends the prepared inputs to the prepared outputs with the
-prepared sequence, version, and lock time. Every input must carry a P2WPKH witness. The transaction is then broadcast
+prepared sequence, version, and lock time. Because the txid says nothing about signatures, every input must also be a
+complete P2WPKH spend of the prepared input: an empty script signature and a witness of exactly two items, a non-empty
+signature of at most 73 bytes and a compressed public key whose P2WPKH script is the script of the prepared input's
+`address`. This is checked right after the txid, before the repeat and expiry checks. The transaction is then broadcast
 through Esplora. The broadcast counts as done only when Esplora answers 2xx with a body that is exactly the prepared
 `txid` (surrounding whitespace ignored). Any other 2xx body (empty, HTML, JSON, another txid) answers 502
 `OutboundRequestFailed`, and the prepared payment stays submittable.
 
-Response 200: `{ txid, prepareId, alreadySubmitted }`. Repeating a submit of the same transaction answers the same
-`txid` with `alreadySubmitted: true` and does not broadcast again; so does a first submit when the node already knows
-the transaction.
+Response 200: `{ txid, prepareId, alreadySubmitted }`. Repeating a submit of the same signed transaction answers the
+same `txid` with `alreadySubmitted: true` and does not broadcast again; so does a first submit when the node already
+knows the transaction. A repeat with the unsigned transaction or an incomplete witness answers 400
+`TransactionNotSigned`, never `alreadySubmitted: true`.
 
 Prepared payments are deleted once they expired more than 24 hours ago. The delete runs in every prepare, in every
 submit before the lookup, and once an hour in each running instance, so a payment is gone at the latest about 25 hours
@@ -282,7 +287,9 @@ Errors:
 - 400 `BadRequest`: `prepareId` missing or not a string; `transactionHex` or `psbt` not a string.
 - 400 `SubmitPayloadInvalid`: none or both of `transactionHex` and `psbt`.
 - 400 `TransactionInvalid`: the hex or PSBT cannot be decoded, is too large, or is no valid transaction.
-- 400 `TransactionNotSigned`: an input has no P2WPKH witness, or the PSBT cannot be finalized.
+- 400 `TransactionNotSigned`: an input is no complete P2WPKH spend of the prepared input (no witness, a witness not of
+  two items, an empty or longer than 73-byte signature, a public key that is not compressed or not the key of the
+  prepared input's address), also on a repeat after a successful submit; or the PSBT cannot be finalized.
 - 404 `EsploraNotConfigured`: unknown or unconfigured `:blockchain`.
 - 404 `PrepareNotFound`: `prepareId` is not a UUID, unknown, deleted, or another wallet's or another blockchain's id.
 - 410 `PrepareExpired`.

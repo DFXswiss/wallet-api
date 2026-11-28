@@ -38,7 +38,13 @@ import {
   parseFeeEstimates,
 } from './fee-estimates';
 import { FINAL_SEQUENCE, RBF_SEQUENCE, buildUnsignedPayment } from './psbt-builder';
-import { extractFromPsbt, isSignedP2wpkh, parseRawTransaction, parseTransactionHex } from './raw-transaction';
+import {
+  extractFromPsbt,
+  isSignedP2wpkh,
+  outpointKey,
+  parseRawTransaction,
+  parseTransactionHex,
+} from './raw-transaction';
 
 /** Node answers for a transaction it already has, in the mempool or in a block. */
 const ALREADY_KNOWN =
@@ -239,7 +245,7 @@ export class BitcoinService {
     blockchain: string,
     dto: BitcoinSubmitRequestDto,
   ): Promise<BitcoinSubmitResponseDto> {
-    this.network(blockchain);
+    const network = this.network(blockchain);
     // A prepareId that is not a UUID can never name a prepared payment.
     if (typeof dto.prepareId !== 'string' || !UUID_PATTERN.test(dto.prepareId)) {
       throw walletError(404, 'PrepareNotFound');
@@ -259,14 +265,23 @@ export class BitcoinService {
     if (tx.txid !== record.txid) {
       throw walletError(422, 'TransactionMismatch');
     }
+    // The txid commits to no witness data, so an unsigned or badly signed body has the prepared txid too. The
+    // signature shape is checked before the idempotent answer: only a fully signed spend of the prepared inputs is
+    // ever confirmed as submitted.
+    const prevoutScripts = new Map(
+      record.inputs.map((input) => [
+        outpointKey(input.txid, input.vout),
+        decodeWalletAddress(network, input.address).script,
+      ]),
+    );
+    if (!isSignedP2wpkh(tx, prevoutScripts)) {
+      throw walletError(400, 'TransactionNotSigned');
+    }
     if (record.submittedAt) {
       return { txid: record.txid, prepareId: record.id, alreadySubmitted: true };
     }
     if (record.expiresAt.getTime() <= Date.now()) {
       throw walletError(410, 'PrepareExpired');
-    }
-    if (!isSignedP2wpkh(tx)) {
-      throw walletError(400, 'TransactionNotSigned');
     }
     const alreadyKnown = await this.broadcast(blockchain, raw, record.txid);
     await this.store.markSubmitted(record.id, new Date());

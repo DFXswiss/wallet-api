@@ -41,9 +41,12 @@ function pick(estimates: Map<number, number>, target: number): number {
 /** Fractions of a sat/vB up to this much are dropped before rounding up, so 1.004 becomes 1 and not 2. */
 export const FEE_RATE_ROUNDING_TOLERANCE = 0.05;
 
-/** Rounds up to a whole sat/vB after dropping {@link FEE_RATE_ROUNDING_TOLERANCE}, with a floor of 1 sat/vB. */
+/**
+ * Rounds up to a whole sat/vB after dropping {@link FEE_RATE_ROUNDING_TOLERANCE}, with a floor of 1 sat/vB. No
+ * further rounding: anything above the tolerance rounds up, so 1.0501 becomes 2.
+ */
 export function roundUpRate(rate: number): number {
-  return Math.max(1, Math.ceil(Math.round((rate - FEE_RATE_ROUNDING_TOLERANCE) * 1000) / 1000));
+  return Math.max(1, Math.ceil(rate - FEE_RATE_ROUNDING_TOLERANCE));
 }
 
 /**

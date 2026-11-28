@@ -13,7 +13,7 @@ import { BitcoinPrepareRequestDto } from '../src/bitcoin/bitcoin-prepare.dto';
 import { mapLimit, parseAmount } from '../src/bitcoin/bitcoin.service';
 import { FINAL_SEQUENCE, RBF_SEQUENCE, serializeWithoutWitness } from '../src/bitcoin/psbt-builder';
 import { parseRawTransaction } from '../src/bitcoin/raw-transaction';
-import { p2wpkh, txid, walletCode, walletCodeAsync } from './bitcoin-fixtures';
+import { p2wpkh, publicKey, txid, walletCode, walletCodeAsync } from './bitcoin-fixtures';
 import {
   ACCOUNT,
   CHANGE,
@@ -514,6 +514,99 @@ describe('submit', () => {
     const payment = await context.service.prepare(ACCOUNT, 'BitcoinRegtest', prepareDto());
     return { ...context, payment };
   }
+
+  /** The prepared transaction without witness: what `serializeWithoutWitness` gives, with the prepared txid. */
+  function unsignedRaw(payment: { psbt: string }): Buffer {
+    const psbt = btc.Transaction.fromPSBT(new Uint8Array(Buffer.from(payment.psbt, 'base64')));
+    const inputs = Array.from({ length: psbt.inputsLength }, (_, index) => {
+      const input = psbt.getInput(index);
+      return {
+        txid: Buffer.from(input.txid as Uint8Array).toString('hex'),
+        vout: input.index as number,
+        value: Number(input.witnessUtxo?.amount),
+        script: input.witnessUtxo?.script as Uint8Array,
+      };
+    });
+    const outputs = Array.from({ length: psbt.outputsLength }, (_, index) => {
+      const output = psbt.getOutput(index);
+      return { value: Number(output.amount), script: output.script as Uint8Array };
+    });
+    return serializeWithoutWitness(inputs, outputs, psbt.getInput(0).sequence ?? RBF_SEQUENCE);
+  }
+
+  /** The signed transaction with the witness stacks changed by `change`; the txid stays the prepared one. */
+  function rewitnessedHex(payment: { psbt: string; inputs: { address: string }[] }, change: (w: Buffer[][]) => void) {
+    const witnesses = parseRawTransaction(Buffer.from(signedHex(payment), 'hex')).inputs.map((input) => input.witness);
+    change(witnesses);
+    const unsigned = unsignedRaw(payment);
+    // Every count and length here is below 0xfd, so each varint is one byte.
+    const item = (bytes: Buffer) => Buffer.concat([Buffer.from([bytes.length]), bytes]);
+    const raw = Buffer.concat([
+      unsigned.subarray(0, 4),
+      Buffer.from([0x00, 0x01]),
+      unsigned.subarray(4, unsigned.length - 4),
+      ...witnesses.map((stack) => Buffer.concat([Buffer.from([stack.length]), ...stack.map(item)])),
+      unsigned.subarray(unsigned.length - 4),
+    ]);
+    return raw.toString('hex');
+  }
+
+  it('rebuilds the signed transaction byte for byte when the witness is unchanged', async () => {
+    const { payment } = await prepared();
+    expect(rewitnessedHex(payment, () => undefined)).toBe(signedHex(payment));
+    expect(parseRawTransaction(unsignedRaw(payment)).txid).toBe(payment.txid);
+  });
+
+  it('refuses a repeat with the unsigned transaction after a successful submit', async () => {
+    const { service, payment, posts } = await prepared();
+    await service.submit(ACCOUNT, 'BitcoinRegtest', {
+      prepareId: payment.prepareId,
+      transactionHex: signedHex(payment),
+    });
+    expect(posts).toHaveLength(1);
+    const unsignedHex = unsignedRaw(payment).toString('hex');
+    expect(
+      await walletCodeAsync(() =>
+        service.submit(ACCOUNT, 'BitcoinRegtest', { prepareId: payment.prepareId, transactionHex: unsignedHex }),
+      ),
+    ).toEqual({ status: 400, code: 'TransactionNotSigned' });
+    expect(
+      await walletCodeAsync(() =>
+        service.submit(ACCOUNT, 'BitcoinRegtest', { prepareId: payment.prepareId, psbt: payment.psbt }),
+      ),
+    ).toEqual({ status: 400, code: 'TransactionNotSigned' });
+    expect(posts).toHaveLength(1);
+  });
+
+  it.each<[string, (witnesses: Buffer[][]) => void]>([
+    ['an empty signature', (w) => (w[0][0] = Buffer.alloc(0))],
+    ['a 74-byte signature', (w) => (w[0][0] = Buffer.alloc(74, 0x30))],
+    ['a witness of one item', (w) => w[0].splice(0, 1)],
+    ['a witness of three items', (w) => w[0].push(Buffer.from([1]))],
+    ['the public key of another wallet', (w) => (w[0][1] = Buffer.from(publicKey(3)))],
+  ])('refuses %s, first and as a repeat after a successful submit', async (_case, change) => {
+    const { service, payment, posts, store } = await prepared();
+    const transactionHex = rewitnessedHex(payment, change);
+    expect(parseRawTransaction(Buffer.from(transactionHex, 'hex')).txid).toBe(payment.txid);
+    expect(
+      await walletCodeAsync(() =>
+        service.submit(ACCOUNT, 'BitcoinRegtest', { prepareId: payment.prepareId, transactionHex }),
+      ),
+    ).toEqual({ status: 400, code: 'TransactionNotSigned' });
+    expect(posts).toHaveLength(0);
+    expect(store.submitted).toEqual([]);
+
+    await service.submit(ACCOUNT, 'BitcoinRegtest', {
+      prepareId: payment.prepareId,
+      transactionHex: signedHex(payment),
+    });
+    expect(
+      await walletCodeAsync(() =>
+        service.submit(ACCOUNT, 'BitcoinRegtest', { prepareId: payment.prepareId, transactionHex }),
+      ),
+    ).toEqual({ status: 400, code: 'TransactionNotSigned' });
+    expect(posts).toHaveLength(1);
+  });
 
   it('broadcasts the signed transaction once and answers a repeat with the same txid', async () => {
     const { service, payment, posts, store } = await prepared();

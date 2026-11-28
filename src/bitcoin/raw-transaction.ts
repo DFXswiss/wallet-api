@@ -207,15 +207,46 @@ export function extractFromPsbt(psbtBase64: string): Buffer {
   }
 }
 
+/** Largest DER-encoded ECDSA signature (72 bytes) plus the sighash type byte. */
+export const MAX_SIGNATURE_LENGTH = 73;
+
+/** Key of a previous output, `<txid>:<vout>`, as used by {@link isSignedP2wpkh}. */
+export function outpointKey(txid: string, vout: number): string {
+  return `${txid}:${vout}`;
+}
+
+function p2wpkhScript(publicKey: Buffer): Buffer | undefined {
+  if (publicKey.length !== 33 || (publicKey[0] !== 0x02 && publicKey[0] !== 0x03)) {
+    return undefined;
+  }
+  try {
+    return Buffer.from(btc.p2wpkh(new Uint8Array(publicKey)).script);
+  } catch {
+    return undefined;
+  }
+}
+
 /**
- * True when every input carries what a P2WPKH spend needs: an empty script signature and a two-item witness
- * (signature, public key). Whether the signature is valid is decided by the node on broadcast.
+ * True when every input is a complete P2WPKH spend of the prepared previous output: an empty script signature and a
+ * two-item witness of a non-empty signature of at most {@link MAX_SIGNATURE_LENGTH} bytes and a compressed public
+ * key whose P2WPKH script is the script of the spent output in `prevoutScripts` (keyed by {@link outpointKey}). An
+ * input whose outpoint is not in `prevoutScripts` fails. Whether the signature is valid is decided by the node on
+ * broadcast.
  */
-export function isSignedP2wpkh(tx: ParsedTransaction): boolean {
-  return (
-    tx.segwit &&
-    tx.inputs.every(
-      (input) => input.scriptSigLength === 0 && input.witness.length === 2 && input.witness[1].length === 33,
-    )
-  );
+export function isSignedP2wpkh(tx: ParsedTransaction, prevoutScripts: ReadonlyMap<string, Uint8Array>): boolean {
+  if (!tx.segwit || tx.inputs.length === 0 || tx.inputs.length !== prevoutScripts.size) {
+    return false;
+  }
+  return tx.inputs.every((input) => {
+    const expected = prevoutScripts.get(outpointKey(input.txid, input.vout));
+    if (!expected || input.scriptSigLength !== 0 || input.witness.length !== 2) {
+      return false;
+    }
+    const [signature, publicKey] = input.witness;
+    if (signature.length < 1 || signature.length > MAX_SIGNATURE_LENGTH) {
+      return false;
+    }
+    const script = p2wpkhScript(publicKey);
+    return script !== undefined && script.equals(Buffer.from(expected));
+  });
 }
