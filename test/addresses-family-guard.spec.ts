@@ -62,9 +62,10 @@ describe('PUT /v1/wallet/addresses family refusal', () => {
     jest.clearAllMocks();
   });
 
-  function put(body: unknown, token: string | undefined = VALID_TOKEN): Promise<Response> {
+  // token null sends no Authorization header; omitting it sends the valid session token.
+  function put(body: unknown, token: string | null = VALID_TOKEN): Promise<Response> {
     const headers: Record<string, string> = { 'content-type': 'application/json' };
-    if (token) {
+    if (token !== null) {
       headers.authorization = `Bearer ${token}`;
     }
     return fetch(`${baseUrl}/v1/wallet/addresses`, { method: 'PUT', headers, body: JSON.stringify(body) });
@@ -109,7 +110,7 @@ describe('PUT /v1/wallet/addresses family refusal', () => {
   });
 
   it('answers 401 without a session, before the family check', async () => {
-    const response = await put({ chain: 'spark' }, undefined);
+    const response = await put({ chain: 'spark' }, null);
     expect(response.status).toBe(401);
     await expect(response.json()).resolves.toEqual({
       statusCode: 401,
