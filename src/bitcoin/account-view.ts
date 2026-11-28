@@ -110,7 +110,13 @@ export function parseUtxos(body: unknown): EsploraUtxo[] {
     if (value === 0) {
       malformed();
     }
-    return { txid: txid(parsed.txid), vout: sats(parsed.vout), value, confirmed: state.confirmed, height: state.height };
+    return {
+      txid: txid(parsed.txid),
+      vout: sats(parsed.vout),
+      value,
+      confirmed: state.confirmed,
+      height: state.height,
+    };
   });
 }
 

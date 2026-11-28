@@ -41,7 +41,8 @@ import { FINAL_SEQUENCE, RBF_SEQUENCE, buildUnsignedPayment } from './psbt-build
 import { extractFromPsbt, isSignedP2wpkh, parseRawTransaction, parseTransactionHex } from './raw-transaction';
 
 /** Node answers for a transaction it already has, in the mempool or in a block. */
-const ALREADY_KNOWN = /txn-already-in-mempool|txn-already-known|already in (the )?block ?chain|outputs already in utxo set/i;
+const ALREADY_KNOWN =
+  /txn-already-in-mempool|txn-already-known|already in (the )?block ?chain|outputs already in utxo set/i;
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -190,7 +191,11 @@ export class BitcoinService {
       value,
       address,
     }));
-    const storedOutputs: BitcoinPreparedOutput[] = outputs.map(({ address, value, kind }) => ({ address, value, kind }));
+    const storedOutputs: BitcoinPreparedOutput[] = outputs.map(({ address, value, kind }) => ({
+      address,
+      value,
+      kind,
+    }));
     const now = new Date();
     const expiresAt = new Date(now.getTime() + PREPARE_TTL_MS);
     const record = await this.store.create(

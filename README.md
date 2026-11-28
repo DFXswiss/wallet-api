@@ -91,13 +91,16 @@ reviewed pull request and a deploy. For the families, the deployment configurati
 While a family is off, its routes answer 403 with code `WalletFamilyDisabled`. The refusal comes before validation,
 lookups, database access, and outbound requests. `PUT /v1/wallet/addresses` checks the session first: without a valid
 session it answers 401. After the session check, the refusal comes before body validation, lookups, database access,
-and outbound requests. A JSON body that cannot be parsed is answered with 400 by the body parser before any of these checks.
+and outbound requests. The `/v1/wallet/bitcoin/:blockchain/*` routes check the family first: while `bitcoin` is off
+they answer 403 even without a session or with an invalid one, and no session lookup happens. A JSON body that cannot
+be parsed is answered with 400 by the body parser before any of these checks.
 The routes per family:
 
-- `bitcoin`: `GET /v1/wallet/esplora/:blockchain/*`, `POST /v1/wallet/esplora/:blockchain/tx`, and
-  `PUT /v1/wallet/addresses` with chain `bitcoin`. The Esplora routes belong to this family for every blockchain id,
-  including `BitcoinRegtest`; the family check comes before the upstream lookup, so an id without an upstream answers
-  403 rather than 404 while the family is off.
+- `bitcoin`: `GET /v1/wallet/esplora/:blockchain/*`, `POST /v1/wallet/esplora/:blockchain/tx`,
+  `PUT /v1/wallet/addresses` with chain `bitcoin`, and every `/v1/wallet/bitcoin/:blockchain/*` route (`account`,
+  `fees`, `prepare`, `submit`). The Esplora and Bitcoin routes belong to this family for every blockchain id (`Bitcoin`,
+  `BitcoinTestnet4`, `BitcoinRegtest`, and any other id); the family check comes before the upstream lookup, so an id
+  without an upstream answers 403 rather than 404 while the family is off.
 - `spark`: `PUT /v1/wallet/addresses` with chain `spark`, `GET /v1/wallet/lnurl`, and
   `GET /v1/wallet/lightning-address/:address`. Lightning is paid only through Spark in this wallet.
 - `evm`: `POST /v1/wallet/evm/:chainId/rpc`, `GET /v1/wallet/ens/address`, `GET /v1/wallet/ens/name`, and
@@ -142,13 +145,20 @@ Allowed methods are `GET`, `POST`, and `PUT`; allowed request headers are `Autho
 Credentials are not allowed: the wallet session travels in the `Authorization` header. Preflight answers are cached for
 600 seconds. A request from another origin receives no `Access-Control-Allow-Origin` header.
 
+CORS stays in this service. The DFX API host (DFXswiss/front-api) forwards `/v1/wallet/*` to Wallet API and passes the
+upstream response headers through unchanged; it adds no CORS headers of its own for `/v1/wallet/*`. The CORS headers
+the browser sees on `/v1/wallet/*`, including the `/v1/wallet/bitcoin/*` routes and their preflights, are therefore the
+ones set here. Moving CORS to the forwarding host would need a change in both repositories at the same time.
+
 ## Bitcoin on-chain
 
 This service prepares Bitcoin payments; the device signs them. The device derives its BIP-84 addresses (P2WPKH), sends
 them with each request, signs the returned PSBT with the key of each input's address, and returns the signed payment.
 Seeds and private keys never reach this service.
 
-Every route is `/v1/wallet/bitcoin/:blockchain/...` and requires a wallet session (`Authorization: Bearer <token>`).
+Every route is `/v1/wallet/bitcoin/:blockchain/...` and belongs to the `bitcoin` wallet family: while it is off, every
+route answers 403 `WalletFamilyDisabled` before the session check, validation, the blockchain lookup, database access,
+and any Esplora request. While it is on, every route requires a wallet session (`Authorization: Bearer <token>`).
 `:blockchain` is `Bitcoin`, `BitcoinTestnet4`, or `BitcoinRegtest`, and only when its Esplora upstream is configured:
 `ESPLORA_BASE_URLS` for the first two, `ESPLORA_REGTEST_URL` for regtest, which is never available on `prd`. Any other
 or unconfigured id answers 404 `EsploraNotConfigured`, like the Esplora proxy. Wallet addresses must be P2WPKH on that

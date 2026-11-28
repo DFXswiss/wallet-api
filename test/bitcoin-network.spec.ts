@@ -104,7 +104,12 @@ describe('destinations', () => {
   });
 
   it('refuses an invalid destination', () => {
-    for (const address of ['', 'hello', 'bcrt1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq', `${p2wpkh(3, REGTEST_PARAMS)}x`]) {
+    for (const address of [
+      '',
+      'hello',
+      'bcrt1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq',
+      `${p2wpkh(3, REGTEST_PARAMS)}x`,
+    ]) {
       expect(walletCode(() => decodeDestination(regtest, address))).toEqual({
         status: 400,
         code: 'DestinationInvalid',

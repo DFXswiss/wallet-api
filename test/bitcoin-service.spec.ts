@@ -11,6 +11,7 @@ import { parseRawTransaction } from '../src/bitcoin/raw-transaction';
 import { OutboundRequest } from '../src/outbound/http-transport';
 import { ProxyService } from '../src/proxy/proxy.service';
 import { p2wpkh, privateKey, txid, walletCode, walletCodeAsync } from './bitcoin-fixtures';
+import { allFamiliesOn } from './wallet-families.fixtures';
 
 const REGTEST_URL = 'http://regtest-esplora.example:3000';
 const ACCOUNT = '00000000-0000-4000-8000-000000000001';
@@ -87,7 +88,7 @@ function setup(options: Setup = {}) {
       BitcoinTestnet4: 'https://testnet4-esplora.example.com',
     }),
   });
-  const proxy = new ProxyService(config, transport as any);
+  const proxy = new ProxyService(config, transport as any, allFamiliesOn());
   const store = new MemoryStore();
   const service = new BitcoinService(config, proxy, store as unknown as BitcoinPaymentStore);
   return { service, transport, store, posts, routes };
@@ -722,7 +723,10 @@ describe('prepared payment store', () => {
     const seen: { cutoff?: Date; lockParams?: unknown[] } = {};
     const store = new BitcoinPaymentStore({} as any, fakeDataSource(MAX_LIVE_PREPARES, events, seen) as any);
     const now = new Date();
-    expect(await walletCodeAsync(() => store.create(payment, now))).toEqual({ status: 429, code: 'PrepareRateLimited' });
+    expect(await walletCodeAsync(() => store.create(payment, now))).toEqual({
+      status: 429,
+      code: 'PrepareRateLimited',
+    });
     expect(events).toEqual(['lock', 'sweep', 'count']);
     expect(seen.lockParams?.[1]).toBe(ACCOUNT);
     expect(now.getTime() - (seen.cutoff as Date).getTime()).toBe(PREPARE_RETENTION_MS);

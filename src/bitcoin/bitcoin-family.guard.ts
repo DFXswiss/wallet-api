@@ -1,24 +1,18 @@
 import { CanActivate, Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { walletError } from '../common/wallet-error';
+import { WalletFamilies, WalletFamily } from '../config/wallet-families';
 
-/**
- * The single hook point for the wallet family switch. Every `/v1/wallet/bitcoin/*` route passes through it.
- * The `bitcoin` family is on until the family switches land; that change replaces this body with the switch for
- * `bitcoin` and nothing else in this module.
- */
-export function bitcoinFamilyEnabled(_config: ConfigService): boolean {
-  return true;
-}
+// Every Bitcoin route blockchain (Bitcoin, BitcoinTestnet4, BitcoinRegtest) belongs to the bitcoin family.
+export const BITCOIN_ROUTE_FAMILY: WalletFamily = 'bitcoin';
 
+// The wallet family switch for every /v1/wallet/bitcoin/:blockchain/* route. It is the first guard of the controller,
+// so a request while the bitcoin family is off answers 403 WalletFamilyDisabled before the SessionGuard (no session
+// lookup), before the ValidationPipe, and before any blockchain resolution, database access, or Esplora request.
 @Injectable()
 export class BitcoinFamilyGuard implements CanActivate {
-  constructor(private readonly config: ConfigService) {}
+  constructor(private readonly families: WalletFamilies) {}
 
   canActivate(): true {
-    if (!bitcoinFamilyEnabled(this.config)) {
-      throw walletError(404, 'WalletFamilyDisabled');
-    }
+    this.families.assertEnabled(BITCOIN_ROUTE_FAMILY);
     return true;
   }
 }

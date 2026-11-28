@@ -148,7 +148,9 @@ describe('coin selection', () => {
 
 describe('max send', () => {
   it('spends every spendable UTXO into one output without change', () => {
-    const selection = selectCoins(request({ amount: 'max', feeRate: 2, utxos: [utxo(30_000, 'a'), utxo(20_000, 'b')] }));
+    const selection = selectCoins(
+      request({ amount: 'max', feeRate: 2, utxos: [utxo(30_000, 'a'), utxo(20_000, 'b')] }),
+    );
     expect(selection).toMatchObject({ amount: 49_644, fee: 356, change: 0, vsize: 178, totalInput: 50_000 });
     expect(selection.inputs).toHaveLength(2);
   });

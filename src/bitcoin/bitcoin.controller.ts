@@ -9,13 +9,19 @@ import { BitcoinPrepareRequestDto, BitcoinPrepareResponseDto } from './bitcoin-p
 import { BitcoinSubmitRequestDto, BitcoinSubmitResponseDto } from './bitcoin-submit.dto';
 import { BitcoinService } from './bitcoin.service';
 
+// The `blockchain` path parameter of every route. `@ApiParam` is a method decorator in this @nestjs/swagger version,
+// so each route carries it.
+const BlockchainParam = () =>
+  ApiParam({
+    name: 'blockchain',
+    enum: Object.keys(BITCOIN_NETWORKS),
+    description: 'An Esplora blockchain id that is configured in this environment; others answer 404.',
+  });
+
+// Guard order: BitcoinFamilyGuard (403 WalletFamilyDisabled while the bitcoin family is off), then SessionGuard,
+// then the ValidationPipe, then the service.
 @ApiTags('bitcoin')
 @ApiBearerAuth()
-@ApiParam({
-  name: 'blockchain',
-  enum: Object.keys(BITCOIN_NETWORKS),
-  description: 'An Esplora blockchain id that is configured in this environment; others answer 404.',
-})
 @UseGuards(BitcoinFamilyGuard, SessionGuard)
 @Controller('wallet/bitcoin/:blockchain')
 export class BitcoinController {
@@ -23,12 +29,14 @@ export class BitcoinController {
 
   @Post('account')
   @HttpCode(200)
+  @BlockchainParam()
   @ApiOkResponse({ type: BitcoinAccountResponseDto })
   account(@Param('blockchain') blockchain: string, @Body() dto: BitcoinAccountRequestDto) {
     return this.bitcoin.account(blockchain, dto);
   }
 
   @Get('fees')
+  @BlockchainParam()
   @ApiOkResponse({ type: BitcoinFeesResponseDto })
   fees(@Param('blockchain') blockchain: string) {
     return this.bitcoin.fees(blockchain);
@@ -36,6 +44,7 @@ export class BitcoinController {
 
   @Post('prepare')
   @HttpCode(201)
+  @BlockchainParam()
   @ApiCreatedResponse({ type: BitcoinPrepareResponseDto })
   prepare(
     @Req() request: AuthenticatedRequest,
@@ -47,6 +56,7 @@ export class BitcoinController {
 
   @Post('submit')
   @HttpCode(200)
+  @BlockchainParam()
   @ApiOkResponse({ type: BitcoinSubmitResponseDto })
   submit(
     @Req() request: AuthenticatedRequest,
