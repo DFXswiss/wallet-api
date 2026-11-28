@@ -103,17 +103,15 @@ export function parseUtxos(body: unknown): EsploraUtxo[] {
   if (!Array.isArray(body)) {
     malformed();
   }
+  // A zero-value UTXO is valid on chain (and anyone can create one for a known address), so it is not a malformed
+  // answer: the account view lists it and prepare counts it in `uneconomicalUtxos`.
   return body.map((entry) => {
     const parsed = record(entry);
     const state = status(parsed.status);
-    const value = sats(parsed.value);
-    if (value === 0) {
-      malformed();
-    }
     return {
       txid: txid(parsed.txid),
       vout: sats(parsed.vout),
-      value,
+      value: sats(parsed.value),
       confirmed: state.confirmed,
       height: state.height,
     };

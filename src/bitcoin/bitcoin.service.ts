@@ -240,6 +240,10 @@ export class BitcoinService {
     dto: BitcoinSubmitRequestDto,
   ): Promise<BitcoinSubmitResponseDto> {
     this.network(blockchain);
+    // A prepareId that is not a UUID can never name a prepared payment.
+    if (typeof dto.prepareId !== 'string' || !UUID_PATTERN.test(dto.prepareId)) {
+      throw walletError(404, 'PrepareNotFound');
+    }
     const hasHex = dto.transactionHex !== undefined && dto.transactionHex !== null;
     const hasPsbt = dto.psbt !== undefined && dto.psbt !== null;
     if (hasHex === hasPsbt) {
@@ -247,9 +251,7 @@ export class BitcoinService {
     }
     const raw = hasHex ? parseTransactionHex(dto.transactionHex) : extractFromPsbt(dto.psbt);
     const tx = parseRawTransaction(raw);
-    if (typeof dto.prepareId !== 'string' || !UUID_PATTERN.test(dto.prepareId)) {
-      throw walletError(404, 'PrepareNotFound');
-    }
+    await this.sweepExpired();
     const record = await this.store.find(dto.prepareId, walletAccountId, blockchain);
     if (!record) {
       throw walletError(404, 'PrepareNotFound');
@@ -271,12 +273,28 @@ export class BitcoinService {
     return { txid: record.txid, prepareId: record.id, alreadySubmitted: alreadyKnown };
   }
 
-  /** Returns true when the node already had the transaction. */
+  /**
+   * Deletes prepared payments past their retention before a submit looks one up. Best effort: the store's hourly
+   * sweep retries, and a failed delete must not block a payment.
+   */
+  private async sweepExpired(): Promise<void> {
+    try {
+      await this.store.sweepExpired(new Date());
+    } catch {
+      // Ignored on purpose, see above.
+    }
+  }
+
+  /**
+   * Returns true when the node already had the transaction. A 2xx answer counts as broadcast only when its body is
+   * exactly the expected txid; any other 2xx body (empty, HTML, JSON, another txid) answers 502
+   * `OutboundRequestFailed`, and the prepared payment stays submittable.
+   */
   private async broadcast(blockchain: string, raw: Buffer, txid: string): Promise<boolean> {
     const response = await this.proxy.esploraPostTransaction(blockchain, Buffer.from(raw.toString('hex'), 'utf8'));
     const text = Buffer.from(response.body).toString('utf8').trim();
     if (response.status >= 200 && response.status < 300) {
-      if (/^[0-9a-f]{64}$/.test(text) && text !== txid) {
+      if (!/^[0-9a-f]{64}$/.test(text) || text !== txid) {
         throw walletError(502, 'OutboundRequestFailed');
       }
       return false;

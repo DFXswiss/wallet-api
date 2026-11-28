@@ -2,13 +2,18 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const root = join(__dirname, '..');
-const files = [
+const migrations = [
   'src/migrations/1740000000000-WalletSchema.ts',
+  'src/migrations/1795824000000-BitcoinPreparedPayment.ts',
+];
+const files = [
+  ...migrations,
   'src/entities/wallet-account.entity.ts',
   'src/entities/passkey-credential.entity.ts',
   'src/entities/passkey-challenge.entity.ts',
   'src/entities/passkey-address.entity.ts',
   'src/entities/passkey-diagnostic.entity.ts',
+  'src/entities/bitcoin-prepared-payment.entity.ts',
 ];
 
 describe('wallet schema safety', () => {
@@ -32,13 +37,14 @@ describe('wallet schema safety', () => {
   });
 
   it('creates all service-owned tables', () => {
-    const source = readFileSync(join(root, 'src/migrations/1740000000000-WalletSchema.ts'), 'utf8');
+    const source = migrations.map((file) => readFileSync(join(root, file), 'utf8')).join('\n');
     for (const table of [
       'wallet_account',
       'passkey_credential',
       'passkey_challenge',
       'passkey_address',
       'passkey_diagnostic',
+      'bitcoin_prepared_payment',
     ]) {
       expect(source).toContain(`CREATE TABLE "${table}"`);
     }

@@ -1,19 +1,10 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import {
-  ArrayMaxSize,
-  ArrayMinSize,
-  ArrayUnique,
-  IsArray,
-  IsInt,
-  IsOptional,
-  IsString,
-  Length,
-  Max,
-  Min,
-} from 'class-validator';
+import { IsArray, IsNumber, IsOptional, IsString } from 'class-validator';
 import { DEFAULT_HISTORY_LIMIT, MAX_HISTORY_LIMIT } from './account-view';
-import { MAX_ADDRESS_LENGTH, MAX_WALLET_ADDRESSES, MIN_ADDRESS_LENGTH } from './bitcoin-limits';
+import { MAX_WALLET_ADDRESSES } from './bitcoin-limits';
 
+// The decorators check only JSON type and presence (400 `BadRequest`). Count, format, and range are checked by
+// BitcoinService, which answers the documented codes (`AddressInvalid`, `HistoryLimitInvalid`).
 export class BitcoinAccountRequestDto {
   @ApiProperty({
     description: 'BIP-84 receive and change addresses derived by the device (P2WPKH on the route network).',
@@ -22,18 +13,12 @@ export class BitcoinAccountRequestDto {
     maxItems: MAX_WALLET_ADDRESSES,
   })
   @IsArray()
-  @ArrayMinSize(1)
-  @ArrayMaxSize(MAX_WALLET_ADDRESSES)
-  @ArrayUnique()
   @IsString({ each: true })
-  @Length(MIN_ADDRESS_LENGTH, MAX_ADDRESS_LENGTH, { each: true })
   addresses: string[];
 
-  @ApiPropertyOptional({ minimum: 1, maximum: MAX_HISTORY_LIMIT, default: DEFAULT_HISTORY_LIMIT })
+  @ApiPropertyOptional({ minimum: 1, maximum: MAX_HISTORY_LIMIT, default: DEFAULT_HISTORY_LIMIT, type: 'integer' })
   @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Max(MAX_HISTORY_LIMIT)
+  @IsNumber()
   historyLimit?: number;
 }
 

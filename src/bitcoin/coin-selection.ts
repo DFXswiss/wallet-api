@@ -112,7 +112,9 @@ function assertInteger(value: number, minimum: number): void {
 export function selectCoins(request: CoinSelectionRequest): CoinSelection {
   const { feeRate, destinationScriptLength, destinationDust } = request;
   assertInteger(feeRate, 1);
-  request.utxos.forEach((utxo) => assertInteger(utxo.value, 1));
+  // Zero-value outputs are valid on chain and anyone can send one to a wallet address; they are counted as
+  // uneconomical below and never spent.
+  request.utxos.forEach((utxo) => assertInteger(utxo.value, 0));
   const ordered = [...request.utxos].sort(compareUtxos);
   const spendable = ordered.filter((utxo) => utxo.value > P2WPKH_INPUT_VBYTES * feeRate);
   const uneconomicalUtxos = ordered.length - spendable.length;

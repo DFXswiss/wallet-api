@@ -22,7 +22,8 @@ and prices. Lightning-address and LNURL lookup belong in this service. The payme
 Bitcoin rule or the Spark rule above.
 
 Wallet API is the public, non-custodial wallet HTTP API. It stores passkey credentials, one-time WebAuthn challenges,
-wallet addresses, and diagnostics in a Postgres database owned by this service. A wallet session issued by this API is a
+wallet addresses, diagnostics, and prepared Bitcoin payments (unsigned PSBT, inputs with their wallet addresses,
+outputs, amount, fee, txid) in a Postgres database owned by this service. A wallet session issued by this API is a
 session for Wallet API only; it is not a customer session or a token for any other service.
 
 The seed and the passkey private key never reach this process. Registration stores the COSE public key, the WebAuthn
@@ -133,8 +134,8 @@ more than 16 calls is refused before any upstream request.
 
 ## Browser access (CORS)
 
-Browsers on the app origin call this API through the DFX API host. CORS allows exactly one origin per environment and
-no other:
+Browsers on the app origin call this API through the DFX API host. CORS allows only the environment's app origin (on
+`loc`, also `PASSKEY_ORIGIN`) and no other:
 
 - `prd`: `https://app.dfx.swiss`
 - `stg`: `https://stg.app.dfx.swiss`
@@ -163,16 +164,24 @@ and any Esplora request. While it is on, every route requires a wallet session (
 `ESPLORA_BASE_URLS` for the first two, `ESPLORA_REGTEST_URL` for regtest, which is never available on `prd`. Any other
 or unconfigured id answers 404 `EsploraNotConfigured`, like the Esplora proxy. Wallet addresses must be P2WPKH on that
 network (`bc1q`, `tb1q`, `bcrt1q`); bech32 addresses are accepted in all lower or all upper case and are returned in
-lower case. All amounts are integer sats. Errors have the shape `{ statusCode, code, message }`.
+lower case. All amounts are integer sats.
+
+Errors have the shape `{ statusCode, code, message }`. For the codes listed below, `message` repeats `code`. The
+request body is checked in two steps. First, the JSON types: a missing required field, or a field of the wrong JSON
+type (for example a number for `amount`, a string for `historyLimit`, or a non-string entry in `addresses`), answers
+400 `BadRequest`, and `message` is then an array of validation messages. Second, the service checks count, format, and
+range and answers the documented codes below, also over HTTP. Unknown fields are dropped.
 
 ### `POST account`
 
-Request: `{ "addresses": string[1..50], "historyLimit"?: 1..100 }` (default 50). Response 200:
+Request: `{ "addresses": string[1..50], "historyLimit"?: 1..100 }` (default 50). Duplicate addresses (also the same
+bech32 address in upper and lower case) are merged. Response 200:
 
 - `balance`: `{ confirmed, unconfirmed, total }`. `unconfirmed` is negative while a spend is in the mempool.
 - `addresses[]`: `{ address, confirmed, unconfirmed, total, txCount, used }`. Gap-limit discovery stays on the device:
   it derives the next batch until it sees 20 consecutive addresses with `used: false`.
-- `utxos[]`: `{ txid, vout, value, address, confirmed, height, confirmations }`.
+- `utxos[]`: `{ txid, vout, value, address, confirmed, height, confirmations }`, unconfirmed first. A zero-value UTXO is
+  listed with `value: 0`; it is valid on chain, anyone can send one to a known address, and prepare never spends it.
 - `history[]`: `{ txid, confirmed, height, time, confirmations, netAmount, fee, direction }`, unconfirmed first, then
   newest first. `netAmount` is what the given addresses received minus what they spent, so an outgoing payment
   includes its fee. `direction` is `incoming`, `outgoing`, or `self`. `fee` is the whole transaction fee.
@@ -180,7 +189,13 @@ Request: `{ "addresses": string[1..50], "historyLimit"?: 1..100 }` (default 50).
   Esplora page (25 confirmed plus the unconfirmed transactions), merged and cut at `historyLimit`. `historyComplete` is
   `false` when older transactions exist.
 
-Errors: 400 `AddressInvalid`, 400 `HistoryLimitInvalid`, 502 `OutboundRequestFailed`.
+Errors:
+
+- 400 `BadRequest`: `addresses` missing or not an array of strings; `historyLimit` not a number.
+- 400 `AddressInvalid`: no address, more than 50, or one that is not P2WPKH on the network (including a wrong length).
+- 400 `HistoryLimitInvalid`: `historyLimit` not an integer from 1 to 100 (for example `0`, `101`, `1.5`).
+- 404 `EsploraNotConfigured`: unknown or unconfigured `:blockchain`.
+- 502 `OutboundRequestFailed`: Esplora failed or answered something malformed.
 
 ### `GET fees`
 
@@ -192,11 +207,14 @@ When Esplora answers with no estimate (regtest usually answers `{}`), `BitcoinTe
 fallback `{ fast: 3, normal: 2, slow: 1 }` with `source: "fallback"`, outside `prd` only. `Bitcoin` has no fallback in any
 environment and nothing has one on `prd`: those answer 503 `FeeEstimatesUnavailable`.
 
+Errors: 404 `EsploraNotConfigured` (unknown or unconfigured `:blockchain`); 502 `OutboundRequestFailed`; 503
+`FeeEstimatesUnavailable`.
+
 ### `POST prepare`
 
 Request:
 
-- `addresses`: the wallet addresses whose UTXOs may be spent, 1 to 50.
+- `addresses`: the wallet addresses whose UTXOs may be spent, 1 to 50; duplicates are merged.
 - `changeAddress`: a P2WPKH address on the network.
 - `destination`: a P2PKH, P2SH, P2WPKH, P2WSH, or P2TR address on the network.
 - `amount`: integer sats as a decimal string, or `"max"`.
@@ -206,7 +224,7 @@ Request:
 - `allowOwnDestination` (default `false`): allow a destination that is one of `addresses` or `changeAddress`.
 
 Selection is deterministic largest-first. UTXOs worth no more than the cost of spending them (68 vB times the fee rate)
-are left out and counted in `uneconomicalUtxos`. Change is created only when it is at least 294 sats; a smaller
+are left out and counted in `uneconomicalUtxos`; zero-value UTXOs always are. Change is created only when it is at least 294 sats; a smaller
 remainder goes to the fee and is reported in `changeAddedToFee`. The change output's position is random. `"max"` spends
 every spendable UTXO into one output without change. A transaction has at most 200 inputs. `vsize` is an upper
 estimate for the signed transaction.
@@ -218,11 +236,26 @@ unsigned BIP-174 PSBT in base64, version 2, lock time 0; every input carries `wi
 `inputs[i].address`. `outputs[]` are `{ address, value, kind }` in transaction order, `kind` being `destination` or
 `change`. The prepared payment can be submitted for 10 minutes.
 
-Errors: 400 `AddressInvalid`, `DestinationInvalid`, `DestinationWrongNetwork`, `AmountInvalid`,
-`FeeRateChoiceInvalid`; 422 `DestinationIsOwnAddress`, `InsufficientFunds`, `AmountBelowDust` (below the
-destination's dust threshold: 546 P2PKH, 540 P2SH, 294 P2WPKH, 330 P2WSH and P2TR), `FeeExceedsAmount`,
-`TooManyInputs`; 429 `PrepareRateLimited` (20 unexpired, unsubmitted prepared payments per wallet); 502
-`OutboundRequestFailed`; 503 `FeeEstimatesUnavailable`.
+Errors:
+
+- 400 `BadRequest`: a required field missing or of the wrong JSON type (`addresses` not an array of strings;
+  `changeAddress`, `destination`, or `amount` not a string; `feeRate` not a string; `feeRateSatPerVb` not a number;
+  `rbf`, `includeUnconfirmed`, or `allowOwnDestination` not a boolean).
+- 400 `AddressInvalid`: `addresses` empty, more than 50, or with an entry that is not P2WPKH on the network; a
+  `changeAddress` that is not P2WPKH on the network.
+- 400 `DestinationInvalid`: `destination` is no address of a supported type (including a wrong length).
+- 400 `DestinationWrongNetwork`: `destination` is valid on another Bitcoin network.
+- 400 `AmountInvalid`: `amount` is neither `"max"` nor an integer from 1 to 21 million BTC in sats without leading
+  zeros (for example `"0"`, `"01"`, `"1.5"`).
+- 400 `FeeRateChoiceInvalid`: none or both of `feeRate` and `feeRateSatPerVb`, a `feeRate` other than `fast`,
+  `normal`, `slow` (for example `"instant"`), or a `feeRateSatPerVb` that is not an integer from 1 to 1000 (for
+  example `0`, `1001`, `1.5`).
+- 404 `EsploraNotConfigured`: unknown or unconfigured `:blockchain`.
+- 422 `DestinationIsOwnAddress`, `InsufficientFunds`, `AmountBelowDust` (below the destination's dust threshold: 546
+  P2PKH, 540 P2SH, 294 P2WPKH, 330 P2WSH and P2TR), `FeeExceedsAmount`, `TooManyInputs`.
+- 429 `PrepareRateLimited`: 20 unexpired, unsubmitted prepared payments per wallet.
+- 502 `OutboundRequestFailed`: Esplora failed or answered something malformed.
+- 503 `FeeEstimatesUnavailable`: `feeRate` was chosen and no estimate is available (see `GET fees`).
 
 ### `POST submit`
 
@@ -232,16 +265,31 @@ PSBT in base64, finalized or not; this service finalizes it, which needs no key)
 The signed transaction must have the prepared `txid`. P2WPKH signatures sit in the witness, which the txid does not
 cover, so the txid is equal exactly when the transaction spends the prepared inputs to the prepared outputs with the
 prepared sequence, version, and lock time. Every input must carry a P2WPKH witness. The transaction is then broadcast
-through Esplora.
+through Esplora. The broadcast counts as done only when Esplora answers 2xx with a body that is exactly the prepared
+`txid` (surrounding whitespace ignored). Any other 2xx body (empty, HTML, JSON, another txid) answers 502
+`OutboundRequestFailed`, and the prepared payment stays submittable.
 
 Response 200: `{ txid, prepareId, alreadySubmitted }`. Repeating a submit of the same transaction answers the same
 `txid` with `alreadySubmitted: true` and does not broadcast again; so does a first submit when the node already knows
-the transaction. Prepared payments are deleted 24 hours after they expire.
+the transaction.
 
-Errors: 400 `SubmitPayloadInvalid`, `TransactionInvalid`, `TransactionNotSigned`; 404 `PrepareNotFound` (also for
-another wallet's or another blockchain's id); 410 `PrepareExpired`; 422 `TransactionMismatch`, `BroadcastRejected`
-(the node refused the transaction; the prepared payment stays submittable until it expires); 502
-`OutboundRequestFailed`.
+Prepared payments are deleted once they expired more than 24 hours ago. The delete runs in every prepare, in every
+submit before the lookup, and once an hour in each running instance, so a payment is gone at the latest about 25 hours
+after it expired even without further requests. After that, its `prepareId` answers 404 `PrepareNotFound`.
+
+Errors:
+
+- 400 `BadRequest`: `prepareId` missing or not a string; `transactionHex` or `psbt` not a string.
+- 400 `SubmitPayloadInvalid`: none or both of `transactionHex` and `psbt`.
+- 400 `TransactionInvalid`: the hex or PSBT cannot be decoded, is too large, or is no valid transaction.
+- 400 `TransactionNotSigned`: an input has no P2WPKH witness, or the PSBT cannot be finalized.
+- 404 `EsploraNotConfigured`: unknown or unconfigured `:blockchain`.
+- 404 `PrepareNotFound`: `prepareId` is not a UUID, unknown, deleted, or another wallet's or another blockchain's id.
+- 410 `PrepareExpired`.
+- 422 `TransactionMismatch`: the transaction's txid differs from the prepared one.
+- 422 `BroadcastRejected`: the node refused the transaction; the prepared payment stays submittable until it expires.
+- 502 `OutboundRequestFailed`: Esplora failed, or answered 2xx without exactly the prepared txid; the prepared payment
+  stays submittable until it expires.
 
 ## Database
 

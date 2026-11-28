@@ -1,24 +1,13 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import {
-  ArrayMaxSize,
-  ArrayMinSize,
-  ArrayUnique,
-  IsArray,
-  IsBoolean,
-  IsIn,
-  IsInt,
-  IsOptional,
-  IsString,
-  Length,
-  Matches,
-  Max,
-  Min,
-} from 'class-validator';
+import { IsArray, IsBoolean, IsNumber, IsOptional, IsString } from 'class-validator';
 import { FEE_RATE_CHOICES, FeeRateChoice, MAX_FEE_RATE_SAT_PER_VB } from './fee-estimates';
-import { MAX_ADDRESS_LENGTH, MAX_WALLET_ADDRESSES, MIN_ADDRESS_LENGTH } from './bitcoin-limits';
+import { MAX_WALLET_ADDRESSES } from './bitcoin-limits';
 
 export const AMOUNT_PATTERN = /^(max|[1-9][0-9]{0,15})$/;
 
+// The decorators check only JSON type and presence (400 `BadRequest`). Count, format, and range are checked by
+// BitcoinService, which answers the documented codes (`AddressInvalid`, `DestinationInvalid`, `AmountInvalid`,
+// `FeeRateChoiceInvalid`, ...).
 export class BitcoinPrepareRequestDto {
   @ApiProperty({
     description: 'The wallet addresses whose UTXOs may be spent (BIP-84 P2WPKH on the route network).',
@@ -27,21 +16,15 @@ export class BitcoinPrepareRequestDto {
     maxItems: MAX_WALLET_ADDRESSES,
   })
   @IsArray()
-  @ArrayMinSize(1)
-  @ArrayMaxSize(MAX_WALLET_ADDRESSES)
-  @ArrayUnique()
   @IsString({ each: true })
-  @Length(MIN_ADDRESS_LENGTH, MAX_ADDRESS_LENGTH, { each: true })
   addresses: string[];
 
   @ApiProperty({ description: 'P2WPKH change address on the route network, derived by the device.' })
   @IsString()
-  @Length(MIN_ADDRESS_LENGTH, MAX_ADDRESS_LENGTH)
   changeAddress: string;
 
   @ApiProperty({ description: 'P2PKH, P2SH, P2WPKH, P2WSH, or P2TR address on the route network.' })
   @IsString()
-  @Length(MIN_ADDRESS_LENGTH, MAX_ADDRESS_LENGTH)
   destination: string;
 
   @ApiProperty({
@@ -50,19 +33,21 @@ export class BitcoinPrepareRequestDto {
     pattern: '^(max|[1-9][0-9]{0,15})$',
   })
   @IsString()
-  @Matches(AMOUNT_PATTERN)
   amount: string;
 
   @ApiPropertyOptional({ enum: [...FEE_RATE_CHOICES], description: 'Exactly one of `feeRate` and `feeRateSatPerVb`.' })
   @IsOptional()
-  @IsIn([...FEE_RATE_CHOICES])
+  @IsString()
   feeRate?: FeeRateChoice;
 
-  @ApiPropertyOptional({ minimum: 1, maximum: MAX_FEE_RATE_SAT_PER_VB, description: 'Integer sat/vB.' })
+  @ApiPropertyOptional({
+    minimum: 1,
+    maximum: MAX_FEE_RATE_SAT_PER_VB,
+    type: 'integer',
+    description: 'Integer sat/vB.',
+  })
   @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Max(MAX_FEE_RATE_SAT_PER_VB)
+  @IsNumber()
   feeRateSatPerVb?: number;
 
   @ApiPropertyOptional({ default: true, description: 'Signal BIP-125 replace-by-fee (sequence 0xfffffffd).' })

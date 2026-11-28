@@ -1,7 +1,17 @@
 import { HttpException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import * as btc from '@scure/btc-signer';
 import { createECDH } from 'node:crypto';
 import { BitcoinNetworkParams } from '../src/bitcoin/bitcoin-network';
+
+/**
+ * A ConfigService that answers only from `values`. `new ConfigService(values)` reads `process.env` first, so an
+ * ambient ENVIRONMENT or ESPLORA_* variable of the test runner would override the values a test sets.
+ */
+export function isolatedConfig(values: Record<string, string | undefined>): ConfigService {
+  const get = (key: string, fallback?: unknown) => (Object.hasOwn(values, key) ? values[key] : fallback);
+  return { get } as unknown as ConfigService;
+}
 
 /** Test-only keys. A key is 32 bytes of the same value; never use such keys with real funds. */
 export function privateKey(seed: number): Uint8Array {

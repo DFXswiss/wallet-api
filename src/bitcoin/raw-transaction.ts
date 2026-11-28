@@ -184,7 +184,11 @@ export function parseTransactionHex(hex: string): Buffer {
  * 400 `TransactionInvalid` when the PSBT cannot be decoded.
  */
 export function extractFromPsbt(psbtBase64: string): Buffer {
-  if (typeof psbtBase64 !== 'string' || !/^[A-Za-z0-9+/]+={0,2}$/.test(psbtBase64)) {
+  if (
+    typeof psbtBase64 !== 'string' ||
+    psbtBase64.length > MAX_RAW_TRANSACTION_BYTES * 3 ||
+    !/^[A-Za-z0-9+/]+={0,2}$/.test(psbtBase64)
+  ) {
     throw walletError(400, 'TransactionInvalid');
   }
   let tx: btc.Transaction;

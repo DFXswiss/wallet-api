@@ -1,22 +1,21 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, IsUUID, Length } from 'class-validator';
-import { MAX_RAW_TRANSACTION_BYTES } from './raw-transaction';
+import { IsOptional, IsString } from 'class-validator';
 
+// The decorators check only JSON type and presence (400 `BadRequest`). Format and size are checked by BitcoinService,
+// which answers the documented codes (`PrepareNotFound`, `SubmitPayloadInvalid`, `TransactionInvalid`, ...).
 export class BitcoinSubmitRequestDto {
-  @ApiProperty({ description: 'The id returned by prepare.' })
-  @IsUUID()
+  @ApiProperty({ description: 'The id returned by prepare.', format: 'uuid' })
+  @IsString()
   prepareId: string;
 
   @ApiPropertyOptional({ description: 'Signed transaction, hex. Exactly one of `transactionHex` and `psbt`.' })
   @IsOptional()
   @IsString()
-  @Length(2, MAX_RAW_TRANSACTION_BYTES * 2)
   transactionHex?: string;
 
   @ApiPropertyOptional({ description: 'Signed (finalized or not) PSBT, base64.' })
   @IsOptional()
   @IsString()
-  @Length(4, MAX_RAW_TRANSACTION_BYTES * 3)
   psbt?: string;
 }
 

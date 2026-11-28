@@ -1,140 +1,36 @@
-import { ConfigService } from '@nestjs/config';
+import { Logger } from '@nestjs/common';
 import * as btc from '@scure/btc-signer';
 import { randomUUID } from 'node:crypto';
-import { MAX_LIVE_PREPARES, PREPARE_RETENTION_MS, PREPARE_TTL_MS } from '../src/bitcoin/bitcoin-limits';
-import { REGTEST_PARAMS, MAINNET_PARAMS } from '../src/bitcoin/bitcoin-network';
+import {
+  MAX_LIVE_PREPARES,
+  PREPARE_RETENTION_MS,
+  PREPARE_SWEEP_INTERVAL_MS,
+  PREPARE_TTL_MS,
+} from '../src/bitcoin/bitcoin-limits';
+import { MAINNET_PARAMS } from '../src/bitcoin/bitcoin-network';
 import { BitcoinPaymentStore, NewPreparedPayment } from '../src/bitcoin/bitcoin-payment.store';
 import { BitcoinPrepareRequestDto } from '../src/bitcoin/bitcoin-prepare.dto';
-import { BitcoinService, mapLimit, parseAmount } from '../src/bitcoin/bitcoin.service';
+import { mapLimit, parseAmount } from '../src/bitcoin/bitcoin.service';
 import { FINAL_SEQUENCE, RBF_SEQUENCE, serializeWithoutWitness } from '../src/bitcoin/psbt-builder';
 import { parseRawTransaction } from '../src/bitcoin/raw-transaction';
-import { OutboundRequest } from '../src/outbound/http-transport';
-import { ProxyService } from '../src/proxy/proxy.service';
-import { p2wpkh, privateKey, txid, walletCode, walletCodeAsync } from './bitcoin-fixtures';
-import { allFamiliesOn } from './wallet-families.fixtures';
-
-const REGTEST_URL = 'http://regtest-esplora.example:3000';
-const ACCOUNT = '00000000-0000-4000-8000-000000000001';
-const OTHER_ACCOUNT = '00000000-0000-4000-8000-000000000002';
-
-const RECEIVE = p2wpkh(1, REGTEST_PARAMS);
-const CHANGE = p2wpkh(2, REGTEST_PARAMS);
-const DESTINATION = p2wpkh(3, REGTEST_PARAMS);
-const FOREIGN = p2wpkh(9, REGTEST_PARAMS);
-
-const confirmedAt = (height: number) => ({ confirmed: true, block_height: height, block_time: 1_700_000_000 });
-
-type StoredRow = NewPreparedPayment & { id: string; submittedAt: Date | null; createdAt: Date };
-
-class MemoryStore {
-  readonly rows = new Map<string, StoredRow>();
-  submitted: string[] = [];
-
-  async create(payment: NewPreparedPayment, now: Date): Promise<StoredRow> {
-    const row = { ...payment, id: randomUUID(), submittedAt: null, createdAt: now };
-    this.rows.set(row.id, row);
-    return row;
-  }
-
-  async find(id: string, walletAccountId: string, blockchain: string): Promise<StoredRow | null> {
-    const row = this.rows.get(id);
-    return row && row.walletAccountId === walletAccountId && row.blockchain === blockchain ? row : null;
-  }
-
-  async markSubmitted(id: string, now: Date): Promise<void> {
-    const row = this.rows.get(id);
-    if (row && !row.submittedAt) {
-      row.submittedAt = now;
-      this.submitted.push(id);
-    }
-  }
-}
-
-type Setup = {
-  environment?: string;
-  routes?: Record<string, unknown>;
-  post?: (hex: string) => { status: number; body: string };
-};
-
-function setup(options: Setup = {}) {
-  const routes: Record<string, unknown> = { 'fee-estimates': {}, 'blocks/tip/height': 105, ...options.routes };
-  const posts: string[] = [];
-  const transport = {
-    request: jest.fn(async (request: OutboundRequest) => {
-      const path = new URL(request.url).pathname.slice(1);
-      if (request.method === 'POST') {
-        const hex = Buffer.from(request.body as Uint8Array).toString('utf8');
-        posts.push(hex);
-        const answer = options.post
-          ? options.post(hex)
-          : { status: 200, body: parseRawTransaction(Buffer.from(hex, 'hex')).txid };
-        return { status: answer.status, headers: { 'content-type': 'text/plain' }, body: Buffer.from(answer.body) };
-      }
-      if (!Object.hasOwn(routes, path)) {
-        return { status: 404, headers: {}, body: Buffer.from('not found') };
-      }
-      return {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-        body: Buffer.from(JSON.stringify(routes[path])),
-      };
-    }),
-  };
-  const config = new ConfigService({
-    ENVIRONMENT: options.environment ?? 'stg',
-    ESPLORA_REGTEST_URL: REGTEST_URL,
-    ESPLORA_BASE_URLS: JSON.stringify({
-      Bitcoin: 'https://esplora.example.com',
-      BitcoinTestnet4: 'https://testnet4-esplora.example.com',
-    }),
-  });
-  const proxy = new ProxyService(config, transport as any, allFamiliesOn());
-  const store = new MemoryStore();
-  const service = new BitcoinService(config, proxy, store as unknown as BitcoinPaymentStore);
-  return { service, transport, store, posts, routes };
-}
-
-function utxoRoute(value: number, byte: string, confirmed = true, vout = 0) {
-  return { txid: txid(byte), vout, value, status: confirmed ? confirmedAt(100) : { confirmed: false } };
-}
-
-function fundedRoutes(extra: Record<string, unknown> = {}) {
-  return {
-    [`address/${RECEIVE}/utxo`]: [utxoRoute(100_000, 'a')],
-    [`address/${CHANGE}/utxo`]: [],
-    ...extra,
-  };
-}
-
-function prepareDto(overrides: Partial<BitcoinPrepareRequestDto> = {}): BitcoinPrepareRequestDto {
-  return {
-    addresses: [RECEIVE, CHANGE],
-    changeAddress: CHANGE,
-    destination: DESTINATION,
-    amount: '40000',
-    feeRateSatPerVb: 2,
-    ...overrides,
-  };
-}
-
-/** What the device does: sign each input with the key of the address the response names. */
-function deviceSign(psbt: string, inputAddresses: string[], finalize = true): btc.Transaction {
-  const keys: Record<string, Uint8Array> = { [RECEIVE]: privateKey(1), [CHANGE]: privateKey(2) };
-  const tx = btc.Transaction.fromPSBT(new Uint8Array(Buffer.from(psbt, 'base64')));
-  inputAddresses.forEach((address, index) => tx.signIdx(keys[address], index));
-  if (finalize) {
-    tx.finalize();
-  }
-  return tx;
-}
-
-function signedHex(prepared: { psbt: string; inputs: { address: string }[] }): string {
-  const tx = deviceSign(
-    prepared.psbt,
-    prepared.inputs.map((input) => input.address),
-  );
-  return Buffer.from(tx.extract()).toString('hex');
-}
+import { p2wpkh, txid, walletCode, walletCodeAsync } from './bitcoin-fixtures';
+import {
+  ACCOUNT,
+  CHANGE,
+  DESTINATION,
+  FOREIGN,
+  OTHER_ACCOUNT,
+  RECEIVE,
+  REGTEST_URL,
+  Setup,
+  confirmedAt,
+  deviceSign,
+  fundedRoutes,
+  prepareDto,
+  setup,
+  signedHex,
+  utxoRoute,
+} from './bitcoin-service.fixtures';
 
 describe('bitcoin routes resolve the blockchain like the proxy', () => {
   it.each(['Litecoin', 'toString', '__proto__', 'bitcoin'])('answers 404 for %s', async (blockchain) => {
@@ -163,6 +59,33 @@ describe('bitcoin routes resolve the blockchain like the proxy', () => {
     const { service, transport } = setup({ routes: { 'fee-estimates': { '1': 2 } } });
     await service.fees('BitcoinRegtest');
     expect(transport.request).toHaveBeenCalledWith(expect.objectContaining({ url: `${REGTEST_URL}/fee-estimates` }));
+  });
+
+  // The A38 runner failed the prd cases while ENVIRONMENT was set in its process environment: `new ConfigService()`
+  // reads process.env before its own values. The fixture's configuration must not.
+  it('ignores the ambient process environment', async () => {
+    const saved = { ENVIRONMENT: process.env.ENVIRONMENT, ESPLORA_REGTEST_URL: process.env.ESPLORA_REGTEST_URL };
+    process.env.ENVIRONMENT = 'dev';
+    process.env.ESPLORA_REGTEST_URL = 'http://ambient-esplora.example:3000';
+    try {
+      const { service } = setup({ environment: 'prd' });
+      expect(await walletCodeAsync(() => service.fees('BitcoinRegtest'))).toEqual({
+        status: 404,
+        code: 'EsploraNotConfigured',
+      });
+      expect(await walletCodeAsync(() => service.fees('BitcoinTestnet4'))).toEqual({
+        status: 503,
+        code: 'FeeEstimatesUnavailable',
+      });
+    } finally {
+      for (const [key, value] of Object.entries(saved)) {
+        if (value === undefined) {
+          delete process.env[key];
+        } else {
+          process.env[key] = value;
+        }
+      }
+    }
   });
 });
 
@@ -308,11 +231,33 @@ describe('account view', () => {
     expect(transport.request).toHaveBeenCalledTimes(5);
   });
 
+  it('lists a zero-value UTXO next to a funded one instead of failing', async () => {
+    const { service } = setup({
+      routes: { ...routes, [`address/${RECEIVE}/utxo`]: [utxoRoute(39_800, '2', false, 1), utxoRoute(0, '3')] },
+    });
+    const view = await service.account('BitcoinRegtest', { addresses: [RECEIVE, CHANGE] });
+    expect(view.utxos).toEqual([
+      expect.objectContaining({ txid: txid('2'), vout: 1, value: 39_800 }),
+      { txid: txid('3'), vout: 0, value: 0, address: RECEIVE, confirmed: true, height: 100, confirmations: 6 },
+    ]);
+    expect(view.balance.total).toBe(39_800);
+  });
+
   it('marks the history incomplete when it is cut at the limit', async () => {
     const { service } = setup({ routes });
     const view = await service.account('BitcoinRegtest', { addresses: [RECEIVE], historyLimit: 1 });
     expect(view.history.map((entry) => entry.txid)).toEqual([txid('2')]);
     expect(view.historyComplete).toBe(false);
+  });
+
+  it('refuses a history limit outside 1 to 100 before any request', async () => {
+    const { service, transport } = setup({ routes });
+    for (const historyLimit of [0, 101, 1.5, -1]) {
+      expect(
+        await walletCodeAsync(() => service.account('BitcoinRegtest', { addresses: [RECEIVE], historyLimit })),
+      ).toEqual({ status: 400, code: 'HistoryLimitInvalid' });
+    }
+    expect(transport.request).not.toHaveBeenCalled();
   });
 
   it('marks the history incomplete when an address has more than one Esplora page', async () => {
@@ -343,17 +288,25 @@ describe('account view', () => {
 
   it('refuses addresses of another network or type before any request', async () => {
     const { service, transport } = setup({ routes });
-    for (const address of [p2wpkh(1, MAINNET_PARAMS), 'bcrt1qinvalid']) {
+    for (const address of [p2wpkh(1, MAINNET_PARAMS), 'bcrt1qinvalid', 'x'.repeat(91), 'bcrt1q', 5 as any]) {
       expect(await walletCodeAsync(() => service.account('BitcoinRegtest', { addresses: [address] }))).toEqual({
         status: 400,
         code: 'AddressInvalid',
       });
     }
-    expect(await walletCodeAsync(() => service.account('BitcoinRegtest', { addresses: [] }))).toEqual({
-      status: 400,
-      code: 'AddressInvalid',
-    });
+    for (const addresses of [[], new Array(51).fill(RECEIVE), 'not-an-array' as any]) {
+      expect(await walletCodeAsync(() => service.account('BitcoinRegtest', { addresses }))).toEqual({
+        status: 400,
+        code: 'AddressInvalid',
+      });
+    }
     expect(transport.request).not.toHaveBeenCalled();
+  });
+
+  it('merges duplicate addresses', async () => {
+    const { service } = setup({ routes });
+    const view = await service.account('BitcoinRegtest', { addresses: [RECEIVE, RECEIVE, RECEIVE.toUpperCase()] });
+    expect(view.addresses.map((entry) => entry.address)).toEqual([RECEIVE]);
   });
 
   it('maps a malformed upstream answer to 502', async () => {
@@ -428,6 +381,25 @@ describe('prepare', () => {
     expect(psbt.getInput(1).sequence).toBe(FINAL_SEQUENCE);
   });
 
+  it('counts a zero-value UTXO next to a funded one as uneconomical and spends only the funded one', async () => {
+    const { service } = setup({
+      routes: fundedRoutes({ [`address/${CHANGE}/utxo`]: [utxoRoute(0, 'b'), utxoRoute(0, 'c', false)] }),
+    });
+    const fixed = await service.prepare(ACCOUNT, 'BitcoinRegtest', prepareDto({ includeUnconfirmed: true }));
+    expect(fixed).toMatchObject({
+      amount: 40_000,
+      totalInput: 100_000,
+      uneconomicalUtxos: 2,
+      inputs: [{ txid: txid('a'), vout: 0, value: 100_000, address: RECEIVE }],
+    });
+    const max = await service.prepare(ACCOUNT, 'BitcoinRegtest', prepareDto({ amount: 'max' }));
+    expect(max).toMatchObject({
+      totalInput: 100_000,
+      uneconomicalUtxos: 1,
+      inputs: [{ txid: txid('a'), vout: 0, value: 100_000, address: RECEIVE }],
+    });
+  });
+
   it('uses the chosen fee rate preset', async () => {
     const { service } = setup({ routes: fundedRoutes() });
     const prepared = await service.prepare(
@@ -448,6 +420,7 @@ describe('prepare', () => {
       prepareDto({ feeRateSatPerVb: 1.5 }),
       prepareDto({ feeRateSatPerVb: 1001 }),
       prepareDto({ feeRateSatPerVb: undefined, feeRate: 'instant' as any }),
+      prepareDto({ feeRateSatPerVb: undefined, feeRate: '__proto__' as any }),
     ]) {
       expect(await walletCodeAsync(() => service.prepare(ACCOUNT, 'BitcoinRegtest', dto))).toEqual({
         status: 400,
@@ -481,6 +454,15 @@ describe('prepare', () => {
       ),
     ).toEqual({ status: 400, code: 'DestinationWrongNetwork' });
     expect(transport.request).not.toHaveBeenCalled();
+  });
+
+  it('refuses a destination that is no address, also an oversized one', async () => {
+    const { service } = setup({ routes: fundedRoutes() });
+    for (const destination of ['short', '1'.repeat(91), 'bcrt1qinvalid']) {
+      expect(
+        await walletCodeAsync(() => service.prepare(ACCOUNT, 'BitcoinRegtest', prepareDto({ destination }))),
+      ).toEqual({ status: 400, code: 'DestinationInvalid' });
+    }
   });
 
   it('refuses a change address that is not P2WPKH on the network', async () => {
@@ -588,6 +570,17 @@ describe('submit', () => {
     }
   });
 
+  it('answers 404 for a prepareId that is not a UUID before looking at the payload', async () => {
+    const { service, store } = await prepared();
+    store.sweeps = [];
+    for (const prepareId of ['x', '', 42 as any]) {
+      expect(
+        await walletCodeAsync(() => service.submit(ACCOUNT, 'BitcoinRegtest', { prepareId, transactionHex: 'zz' })),
+      ).toEqual({ status: 404, code: 'PrepareNotFound' });
+    }
+    expect(store.sweeps).toEqual([]);
+  });
+
   it('refuses an expired prepared payment', async () => {
     const { service, payment, store, posts } = await prepared();
     store.rows.get(payment.prepareId).expiresAt = new Date(Date.now() - 1);
@@ -597,6 +590,42 @@ describe('submit', () => {
       ),
     ).toEqual({ status: 410, code: 'PrepareExpired' });
     expect(posts).toHaveLength(0);
+  });
+
+  it('deletes prepared payments past retention before the lookup, without any prepare', async () => {
+    const { service, payment, store } = await prepared();
+    const old = await service.prepare(ACCOUNT, 'BitcoinRegtest', prepareDto({ amount: '30000' }));
+    const kept = await service.prepare(ACCOUNT, 'BitcoinRegtest', prepareDto({ amount: '20000' }));
+    store.rows.get(old.prepareId).expiresAt = new Date(Date.now() - PREPARE_RETENTION_MS - 1);
+    store.rows.get(kept.prepareId).expiresAt = new Date(Date.now() - PREPARE_RETENTION_MS + 60_000);
+    store.sweeps = [];
+
+    await service.submit(ACCOUNT, 'BitcoinRegtest', { prepareId: payment.prepareId, transactionHex: signedHex(payment) });
+    expect(store.sweeps).toHaveLength(1);
+    expect(store.rows.has(old.prepareId)).toBe(false);
+    expect(store.rows.has(kept.prepareId)).toBe(true);
+    expect(store.rows.has(payment.prepareId)).toBe(true);
+
+    expect(
+      await walletCodeAsync(() =>
+        service.submit(ACCOUNT, 'BitcoinRegtest', { prepareId: old.prepareId, transactionHex: signedHex(old) }),
+      ),
+    ).toEqual({ status: 404, code: 'PrepareNotFound' });
+    expect(
+      await walletCodeAsync(() =>
+        service.submit(ACCOUNT, 'BitcoinRegtest', { prepareId: kept.prepareId, transactionHex: signedHex(kept) }),
+      ),
+    ).toEqual({ status: 410, code: 'PrepareExpired' });
+  });
+
+  it('still submits when the retention sweep fails', async () => {
+    const { service, payment, store } = await prepared();
+    store.failSweep = true;
+    const result = await service.submit(ACCOUNT, 'BitcoinRegtest', {
+      prepareId: payment.prepareId,
+      transactionHex: signedHex(payment),
+    });
+    expect(result).toEqual({ txid: payment.txid, prepareId: payment.prepareId, alreadySubmitted: false });
   });
 
   it('refuses an unsigned transaction', async () => {
@@ -636,6 +665,15 @@ describe('submit', () => {
     }
   });
 
+  it('refuses an oversized PSBT as TransactionInvalid', async () => {
+    const { service, payment } = await prepared();
+    expect(
+      await walletCodeAsync(() =>
+        service.submit(ACCOUNT, 'BitcoinRegtest', { prepareId: payment.prepareId, psbt: 'A'.repeat(1_200_004) }),
+      ),
+    ).toEqual({ status: 400, code: 'TransactionInvalid' });
+  });
+
   it.each([
     'sendrawtransaction RPC error: {"code":-27,"message":"Transaction already in block chain"}',
     'sendrawtransaction RPC error: {"code":-26,"message":"txn-already-in-mempool"}',
@@ -669,6 +707,46 @@ describe('submit', () => {
       ),
     ).toEqual({ status: 502, code: 'OutboundRequestFailed' });
     expect(store.submitted).toEqual([]);
+  });
+
+  it.each<[string, number, (id: string) => string]>([
+    ['an empty body', 200, () => ''],
+    ['a whitespace body', 200, () => ' \n'],
+    ['an HTML page', 200, () => '<html><body>OK</body></html>'],
+    ['a JSON body with the txid', 200, (id) => JSON.stringify({ txid: id })],
+    ['the txid in upper case', 200, (id) => id.toUpperCase()],
+    ['the txid with a suffix', 200, (id) => `${id}ok`],
+    ['another txid', 200, () => txid('f')],
+    ['an empty 204', 204, () => ''],
+  ])('answers 502 for a 2xx reply with %s and keeps the payment submittable', async (_case, status, body) => {
+    let reply = (id: string) => ({ status, body: body(id) });
+    const { service, payment, store, posts } = await prepared({
+      post: (hex) => reply(parseRawTransaction(Buffer.from(hex, 'hex')).txid),
+    });
+    const transactionHex = signedHex(payment);
+    expect(
+      await walletCodeAsync(() =>
+        service.submit(ACCOUNT, 'BitcoinRegtest', { prepareId: payment.prepareId, transactionHex }),
+      ),
+    ).toEqual({ status: 502, code: 'OutboundRequestFailed' });
+    expect(store.submitted).toEqual([]);
+    expect(store.rows.get(payment.prepareId)?.submittedAt).toBeNull();
+
+    reply = (id) => ({ status: 200, body: id });
+    await expect(
+      service.submit(ACCOUNT, 'BitcoinRegtest', { prepareId: payment.prepareId, transactionHex }),
+    ).resolves.toEqual({ txid: payment.txid, prepareId: payment.prepareId, alreadySubmitted: false });
+    expect(posts).toHaveLength(2);
+    expect(store.submitted).toEqual([payment.prepareId]);
+  });
+
+  it('accepts the expected txid with surrounding whitespace', async () => {
+    const { service, payment } = await prepared({
+      post: (hex) => ({ status: 200, body: `\n${parseRawTransaction(Buffer.from(hex, 'hex')).txid}\n` }),
+    });
+    await expect(
+      service.submit(ACCOUNT, 'BitcoinRegtest', { prepareId: payment.prepareId, transactionHex: signedHex(payment) }),
+    ).resolves.toEqual({ txid: payment.txid, prepareId: payment.prepareId, alreadySubmitted: false });
   });
 });
 
@@ -744,6 +822,55 @@ describe('prepared payment store', () => {
     const store = new BitcoinPaymentStore({} as any, fakeDataSource(MAX_LIVE_PREPARES - 1, events, {}) as any);
     await expect(store.create(payment, new Date())).resolves.toMatchObject({ txid: txid('a'), submittedAt: null });
     expect(events).toEqual(['lock', 'sweep', 'count', 'save']);
+  });
+
+  it('sweeps rows past retention of every account on its own', async () => {
+    const seen: { cutoff?: Date; sql?: string; executed: number } = { executed: 0 };
+    const sweep = {
+      delete: () => sweep,
+      from: () => sweep,
+      where: (sql: string, params: { cutoff: Date }) => {
+        seen.sql = sql;
+        seen.cutoff = params.cutoff;
+        return sweep;
+      },
+      execute: async () => {
+        seen.executed++;
+        return { affected: 3 };
+      },
+    };
+    const store = new BitcoinPaymentStore({ createQueryBuilder: () => sweep } as any, {} as any);
+    const now = new Date();
+    await store.sweepExpired(now);
+    expect(seen.executed).toBe(1);
+    expect(seen.sql).toBe('expires_at <= :cutoff');
+    expect(now.getTime() - (seen.cutoff as Date).getTime()).toBe(PREPARE_RETENTION_MS);
+  });
+
+  it('runs the sweep every interval while the module runs, and logs a failed sweep', async () => {
+    jest.useFakeTimers();
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    try {
+      const store = new BitcoinPaymentStore({} as any, {} as any);
+      const sweep = jest.spyOn(store, 'sweepExpired').mockResolvedValue(undefined);
+      store.onModuleInit();
+      await jest.advanceTimersByTimeAsync(PREPARE_SWEEP_INTERVAL_MS - 1);
+      expect(sweep).not.toHaveBeenCalled();
+      await jest.advanceTimersByTimeAsync(1);
+      expect(sweep).toHaveBeenCalledTimes(1);
+
+      sweep.mockRejectedValueOnce(new Error('database unavailable'));
+      await jest.advanceTimersByTimeAsync(PREPARE_SWEEP_INTERVAL_MS);
+      expect(sweep).toHaveBeenCalledTimes(2);
+      expect(warn).toHaveBeenCalledTimes(1);
+
+      store.onModuleDestroy();
+      await jest.advanceTimersByTimeAsync(PREPARE_SWEEP_INTERVAL_MS * 3);
+      expect(sweep).toHaveBeenCalledTimes(2);
+    } finally {
+      warn.mockRestore();
+      jest.useRealTimers();
+    }
   });
 });
 

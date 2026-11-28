@@ -139,6 +139,16 @@ describe('coin selection', () => {
     });
   });
 
+  it('counts a zero-value UTXO as uneconomical and never spends it', () => {
+    const selection = selectCoins(request({ utxos: [utxo(0, 'b'), utxo(100_000)] }));
+    expect(selection.inputs).toEqual([utxo(100_000)]);
+    expect(selection.uneconomicalUtxos).toBe(1);
+    const max = selectCoins(request({ utxos: [utxo(0, 'b'), utxo(100_000)], amount: 'max' }));
+    expect(max.inputs).toEqual([utxo(100_000)]);
+    expect(max.uneconomicalUtxos).toBe(1);
+    expect(selectionCode({ utxos: [utxo(0, 'b')] })).toEqual({ status: 422, code: 'InsufficientFunds' });
+  });
+
   it('refuses a non-integer fee rate or amount', () => {
     expect(() => selectCoins(request({ feeRate: 1.5 }))).toThrow();
     expect(() => selectCoins(request({ amount: 1_000.5 }))).toThrow();

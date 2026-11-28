@@ -1,6 +1,7 @@
 import * as btc from '@scure/btc-signer';
 import { walletError } from '../common/wallet-error';
 import { ESPLORA_REGTEST_BLOCKCHAIN } from '../proxy/esplora-regtest';
+import { MAX_ADDRESS_LENGTH, MIN_ADDRESS_LENGTH } from './bitcoin-limits';
 import type { FeeRates } from './fee-estimates';
 
 /** Network parameters in the shape `@scure/btc-signer` expects. */
@@ -73,7 +74,8 @@ export function normalizeAddress(raw: string): string {
 }
 
 function decodeFor(params: BitcoinNetworkParams, raw: string): DecodedAddress | undefined {
-  if (typeof raw !== 'string') {
+  // The length bound comes before decoding, so an oversized string never reaches the base58 or bech32 decoder.
+  if (typeof raw !== 'string' || raw.length < MIN_ADDRESS_LENGTH || raw.length > MAX_ADDRESS_LENGTH) {
     return undefined;
   }
   const address = normalizeAddress(raw);
