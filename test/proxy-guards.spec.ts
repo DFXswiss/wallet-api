@@ -1,3 +1,4 @@
+import { allFamiliesOn } from './wallet-families.fixtures';
 import { HttpException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { EVM_ALLOWED_METHODS, EVM_MAX_BATCH, ProxyService } from '../src/proxy/proxy.service';
@@ -15,7 +16,7 @@ describe('proxy guards', () => {
   it('refuses an EVM method outside the allow list before any request', async () => {
     const transport = { request: jest.fn() };
     const config = new ConfigService({ EVM_RPC_URLS: JSON.stringify({ '1': 'https://rpc.example.com' }) });
-    const service = new ProxyService(config, transport as any);
+    const service = new ProxyService(config, transport as any, allFamiliesOn());
     expect(EVM_ALLOWED_METHODS.has('eth_sendRawTransaction')).toBe(true);
     await expect(service.evmRpc('1', { method: 'debug_traceTransaction' })).rejects.toBeInstanceOf(HttpException);
     expect(transport.request).not.toHaveBeenCalled();
@@ -26,7 +27,7 @@ describe('proxy guards', () => {
       request: jest.fn(async () => ({ status: 200, headers: {}, body: Buffer.from('{"result":"0x1"}') })),
     };
     const config = new ConfigService({ EVM_RPC_URLS: JSON.stringify({ '1': 'https://rpc.example.com' }) });
-    const service = new ProxyService(config, transport as any);
+    const service = new ProxyService(config, transport as any, allFamiliesOn());
     const call = { jsonrpc: '2.0', id: 1, method: 'eth_call', params: [] };
     await expect(service.evmRpc('1', [])).rejects.toMatchObject({ status: 400 });
     await expect(
@@ -51,7 +52,7 @@ describe('proxy guards', () => {
 
   it('returns 404 for an unknown EVM chain id', async () => {
     const config = new ConfigService({ EVM_RPC_URLS: JSON.stringify({ '1': 'https://rpc.example.com' }) });
-    const service = new ProxyService(config, { request: jest.fn() } as any);
+    const service = new ProxyService(config, { request: jest.fn() } as any, allFamiliesOn());
     await expect(service.evmRpc('137', { method: 'eth_chainId' })).rejects.toMatchObject({ status: 404 });
   });
 
@@ -63,7 +64,7 @@ describe('proxy guards', () => {
       EVM_RPC_URLS: '{"1":"https://rpc.example.com","__proto__":"https://proto.example.com"}',
       ESPLORA_BASE_URLS: '{"btc":"https://esplora.example.com"}',
     });
-    const service = new ProxyService(config, transport as any);
+    const service = new ProxyService(config, transport as any, allFamiliesOn());
     for (const key of ['toString', 'constructor', '__proto__']) {
       await expect(service.esploraGet(key, 'tx/abc')).rejects.toMatchObject({ status: 404 });
     }

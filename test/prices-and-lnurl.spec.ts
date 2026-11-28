@@ -1,3 +1,4 @@
+import { allFamiliesOn } from './wallet-families.fixtures';
 import { ConfigService } from '@nestjs/config';
 import { PricesService } from '../src/prices/prices.service';
 import { LnurlService } from '../src/lnurl/lnurl.service';
@@ -81,14 +82,14 @@ describe('prices and LNURL configuration', () => {
 
   it('refuses an LNURL http URL without opening a socket', async () => {
     const transport = { request: jest.fn() };
-    const service = new LnurlService(safeFetchWith({ resolve: jest.fn() }, transport));
+    const service = new LnurlService(safeFetchWith({ resolve: jest.fn() }, transport), allFamiliesOn());
     await expect(service.resolve('http://example.com/lnurl')).rejects.toMatchObject({ status: 400 });
     expect(transport.request).not.toHaveBeenCalled();
   });
 
   it('refuses a loopback LNURL URL without opening a socket', async () => {
     const transport = { request: jest.fn() };
-    const service = new LnurlService(safeFetchWith({ resolve: jest.fn() }, transport));
+    const service = new LnurlService(safeFetchWith({ resolve: jest.fn() }, transport), allFamiliesOn());
     await expect(service.resolve('https://127.0.0.1/lnurl')).rejects.toMatchObject({ status: 400 });
     expect(transport.request).not.toHaveBeenCalled();
   });
@@ -102,7 +103,7 @@ describe('prices and LNURL configuration', () => {
       })),
     };
     const resolver = { resolve: jest.fn() };
-    const service = new LnurlService(safeFetchWith(resolver, transport));
+    const service = new LnurlService(safeFetchWith(resolver, transport), allFamiliesOn());
     await expect(service.resolve('https://8.8.8.8/lnurl')).resolves.toEqual({});
     expect(resolver.resolve).not.toHaveBeenCalled();
     expect(transport.request).toHaveBeenCalledTimes(1);
@@ -110,7 +111,7 @@ describe('prices and LNURL configuration', () => {
 
   it('refuses a lightning address local part containing a slash', async () => {
     const transport = { request: jest.fn() };
-    const service = new LnurlService(safeFetchWith({ resolve: jest.fn() }, transport));
+    const service = new LnurlService(safeFetchWith({ resolve: jest.fn() }, transport), allFamiliesOn());
     await expect(service.lightningAddress('a/b@example.com')).rejects.toMatchObject({ status: 400 });
     expect(transport.request).not.toHaveBeenCalled();
   });

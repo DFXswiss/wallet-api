@@ -32,9 +32,9 @@ A38 is the review and local CI standard. The job inventory is `.github/a38.json`
 pull request is the release pull request from `develop`, which carries changes that already passed A38 on `develop`.
 
 The standard is pinned at
-<https://github.com/DFXswiss/agent/blob/dbd5aeac2565a6414456c4640a762df1ac046cf9/docs/a38.md>.
+<https://github.com/DFXswiss/agent/blob/3528240c62d72e8f50f8ec5ddda0c4d213f0f04a/docs/a38.md>.
 The guard guide is pinned at
-<https://github.com/DFXswiss/agent/blob/dbd5aeac2565a6414456c4640a762df1ac046cf9/docs/a38-guard.md>.
+<https://github.com/DFXswiss/agent/blob/3528240c62d72e8f50f8ec5ddda0c4d213f0f04a/docs/a38-guard.md>.
 
 Before a pull request is marked ready for review:
 

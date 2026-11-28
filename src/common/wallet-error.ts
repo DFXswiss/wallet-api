@@ -33,4 +33,5 @@ export const WalletErrors = {
   diagnosticTooLarge: () => walletError(413, 'DiagnosticTooLarge'),
   challengeRateLimited: () => walletError(429, 'ChallengeRateLimited'),
   diagnosticRateLimited: () => walletError(429, 'DiagnosticRateLimited'),
+  walletFamilyDisabled: () => walletError(403, 'WalletFamilyDisabled'),
 };

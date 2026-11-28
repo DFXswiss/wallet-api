@@ -1,10 +1,16 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { walletError } from '../common/wallet-error';
+import { WalletFamilies, WalletFamily } from '../config/wallet-families';
 import { HTTP_TRANSPORT, HttpTransport, OutboundResponse } from '../outbound/http-transport';
+import { ESPLORA_REGTEST_BLOCKCHAIN, resolveEsploraRegtestUpstream } from './esplora-regtest';
 import { isValidEsploraPath, isValidEsploraQuery, parseHttpsOriginMap, parseHttpsUrlMap } from './proxy-config';
 
 export const EVM_MAX_BATCH = 16;
+
+// Every Esplora blockchain id, Bitcoin and BitcoinRegtest included, belongs to the bitcoin family. The switch is
+// checked before the upstream lookup, so a family that is off answers 403 WalletFamilyDisabled and never 404.
+const ESPLORA_FAMILY: WalletFamily = 'bitcoin';
 
 export const EVM_ALLOWED_METHODS = new Set([
   'eth_chainId',
@@ -30,10 +36,24 @@ export class ProxyService {
   constructor(
     private readonly config: ConfigService,
     @Inject(HTTP_TRANSPORT) private readonly transport: HttpTransport,
+    private readonly families: WalletFamilies,
   ) {}
 
   get esploraBases(): Record<string, string> {
     return parseHttpsOriginMap(this.config.get<string>('ESPLORA_BASE_URLS'));
+  }
+
+  // BitcoinRegtest has exactly one source, ESPLORA_REGTEST_URL, and only on stg, dev, and loc. It never falls through
+  // to the ESPLORA_BASE_URLS lookup, and a BitcoinRegtest key there (refused at boot) blocks it at request time too.
+  esploraBase(blockchain: string): string | undefined {
+    if (blockchain === ESPLORA_REGTEST_BLOCKCHAIN) {
+      return resolveEsploraRegtestUpstream(
+        this.config.get<string>('ENVIRONMENT'),
+        this.config.get<string>('ESPLORA_REGTEST_URL'),
+        this.config.get<string>('ESPLORA_BASE_URLS'),
+      );
+    }
+    return configuredUrl(this.esploraBases, blockchain);
   }
 
   get evmUrls(): Record<string, string> {
@@ -41,7 +61,8 @@ export class ProxyService {
   }
 
   async esploraGet(blockchain: string, path: string, query = ''): Promise<OutboundResponse> {
-    const base = configuredUrl(this.esploraBases, blockchain);
+    this.families.assertEnabled(ESPLORA_FAMILY);
+    const base = this.esploraBase(blockchain);
     if (!base) {
       throw walletError(404, 'EsploraNotConfigured');
     }
@@ -62,7 +83,8 @@ export class ProxyService {
   }
 
   async esploraPostTransaction(blockchain: string, body: Buffer): Promise<OutboundResponse> {
-    const base = configuredUrl(this.esploraBases, blockchain);
+    this.families.assertEnabled(ESPLORA_FAMILY);
+    const base = this.esploraBase(blockchain);
     if (!base) {
       throw walletError(404, 'EsploraNotConfigured');
     }
@@ -80,6 +102,7 @@ export class ProxyService {
   }
 
   async evmRpc(chainId: string, body: JsonRpcRequest | JsonRpcRequest[]): Promise<unknown> {
+    this.families.assertEnabled('evm');
     const endpoint = configuredUrl(this.evmUrls, chainId);
     if (!endpoint) {
       throw walletError(404, 'EvmChainNotFound');

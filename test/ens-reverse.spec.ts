@@ -1,3 +1,4 @@
+import { allFamiliesOn } from './wallet-families.fixtures';
 import { EnsService } from '../src/ens/ens.service';
 import {
   ENS_REGISTRY_ADDRESS,
@@ -48,7 +49,7 @@ describe('ENS reverse resolution', () => {
       ethereumRpc: 'https://rpc.example',
       ethereumEthCall,
     };
-    return { service: new EnsService(proxy as never), ethereumEthCall };
+    return { service: new EnsService(proxy as never, allFamiliesOn()), ethereumEthCall };
   }
 
   it('returns a reverse name only when forward resolution matches', async () => {
@@ -66,7 +67,7 @@ describe('ENS reverse resolution', () => {
 
   it('reports an upstream JSON-RPC error instead of an unresolved name', async () => {
     const ethereumEthCall = jest.fn(async () => ({ error: { code: -32000 } }));
-    const service = new EnsService({ ethereumRpc: 'https://rpc.example', ethereumEthCall } as never);
+    const service = new EnsService({ ethereumRpc: 'https://rpc.example', ethereumEthCall } as never, allFamiliesOn());
 
     await expect(service.name(ALICE)).rejects.toMatchObject({
       status: 502,
@@ -77,7 +78,7 @@ describe('ENS reverse resolution', () => {
 
   it('treats a zero resolver word as unresolved', async () => {
     const ethereumEthCall = jest.fn(async () => ({ result: `0x${'0'.repeat(64)}` }));
-    const service = new EnsService({ ethereumRpc: 'https://rpc.example', ethereumEthCall } as never);
+    const service = new EnsService({ ethereumRpc: 'https://rpc.example', ethereumEthCall } as never, allFamiliesOn());
 
     await expect(service.name(ALICE)).resolves.toEqual({ name: null });
     expect(ethereumEthCall).toHaveBeenCalledTimes(1);

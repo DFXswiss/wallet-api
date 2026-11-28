@@ -48,12 +48,64 @@ Optional variables:
 
 - `PORT`: listening port, default `3000`.
 - `PASSKEY_RP_ID` and `PASSKEY_ORIGIN`: the WebAuthn relying party pair. Passkey routes return 503 until it is valid.
-- `ESPLORA_BASE_URLS`: a JSON object mapping a blockchain id to an HTTPS origin.
+- `ESPLORA_BASE_URLS`: a JSON object mapping a blockchain id to an HTTPS origin. A `BitcoinRegtest` key stops boot in
+  every environment; regtest has its own variable below.
+- `ESPLORA_REGTEST_URL`: the Esplora upstream for the blockchain id `BitcoinRegtest`, and its only source. The value
+  is an `http:` or `https:` origin with no path other than `/`, no credentials, no query, and no fragment, for example
+  `http://regtest-esplora.example:3000`. It is accepted on `stg`, `dev`, and `loc`; an invalid value stops boot. On
+  `prd`, setting it stops boot, and `BitcoinRegtest` always answers 404 `EsploraNotConfigured`. While it is unset,
+  `BitcoinRegtest` answers 404 `EsploraNotConfigured`, and a `BitcoinRegtest` key in `ESPLORA_BASE_URLS` is never
+  used. `BitcoinRegtest` belongs to the `bitcoin` family like every Esplora blockchain id: while `bitcoin` is off it
+  answers 403 `WalletFamilyDisabled` before any of these checks. Path, query, and transaction checks are the same as
+  for `ESPLORA_BASE_URLS`.
 - `EVM_RPC_URLS`: a JSON object mapping a chain id string to an HTTPS JSON-RPC URL.
 - `WALLET_PRICE_URL`: an HTTPS price source URL. Prices return 503 while it is unset.
 - `WALLET_PRICE_HOSTS`: comma-separated hosts permitted for `WALLET_PRICE_URL`.
 
 The HTTP server listens on `PORT` (default `3000`). Every public route has the path prefix `/v1/wallet`.
+
+### Wallet families
+
+Wallet API decides which chain families the passkey wallet offers. The app shows exactly what
+`GET /v1/wallet/config` returns. The route needs no session:
+
+```json
+{ "families": { "bitcoin": true, "spark": false, "evm": false } }
+```
+
+Every family is always present, as `true` (offered) or `false` (not offered). There is no other field.
+
+The switches are not environment variables. Each environment has its own file in this repository,
+`src/config/environments/<env>.ts`, selected by `ENVIRONMENT`. The process reads the file at boot. Every file must
+set `bitcoin`, `spark`, and `evm` to `true` or `false`. A missing switch, a value other than `true` or `false`, an
+unknown family, or a missing or unknown `ENVIRONMENT` stops boot before the migrations run. Changing a switch needs a
+reviewed pull request and a deploy. For the families, the deployment configuration only sets `ENVIRONMENT`.
+
+| Environment (`ENVIRONMENT`) | `bitcoin` | `spark` | `evm`   |
+| --------------------------- | --------- | ------- | ------- |
+| `prd`                       | `true`    | `false` | `false` |
+| `stg`                       | `true`    | `false` | `false` |
+| `dev`                       | `true`    | `false` | `false` |
+| `loc`                       | `true`    | `false` | `false` |
+
+While a family is off, its routes answer 403 with code `WalletFamilyDisabled`. The refusal comes before validation,
+lookups, database access, and outbound requests. `PUT /v1/wallet/addresses` checks the session first: without a valid
+session it answers 401. After the session check, the refusal comes before body validation, lookups, database access,
+and outbound requests. A JSON body that cannot be parsed is answered with 400 by the body parser before any of these checks.
+The routes per family:
+
+- `bitcoin`: `GET /v1/wallet/esplora/:blockchain/*`, `POST /v1/wallet/esplora/:blockchain/tx`, and
+  `PUT /v1/wallet/addresses` with chain `bitcoin`. The Esplora routes belong to this family for every blockchain id,
+  including `BitcoinRegtest`; the family check comes before the upstream lookup, so an id without an upstream answers
+  403 rather than 404 while the family is off.
+- `spark`: `PUT /v1/wallet/addresses` with chain `spark`, `GET /v1/wallet/lnurl`, and
+  `GET /v1/wallet/lightning-address/:address`. Lightning is paid only through Spark in this wallet.
+- `evm`: `POST /v1/wallet/evm/:chainId/rpc`, `GET /v1/wallet/ens/address`, `GET /v1/wallet/ens/name`, and
+  `PUT /v1/wallet/addresses` with chain `ethereum`.
+
+`GET /v1/wallet/chains` and `GET /v1/wallet/addresses` leave out the entries of a family that is off. Stored addresses
+stay in the database and are listed again when their family is switched on. `GET /v1/wallet/prices` and
+`GET /v1/wallet/lists/:id` do not belong to a family.
 
 Passkey relying party settings are strict:
 
