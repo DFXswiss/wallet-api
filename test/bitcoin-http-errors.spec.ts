@@ -98,6 +98,8 @@ describe('/v1/wallet/bitcoin/:blockchain error codes over HTTP', () => {
       ['addresses that are no array', { addresses: RECEIVE }],
       ['a non-string address', { addresses: [42] }],
       ['a string historyLimit', { addresses: [RECEIVE], historyLimit: '5' }],
+      ['a null historyLimit', { addresses: [RECEIVE], historyLimit: null }],
+      ['null addresses', { addresses: null }],
     ])('answers 400 BadRequest for %s', async (_case, body) => {
       const response = await call('POST', 'BitcoinRegtest/account', body);
       expect(response.status).toBe(400);
@@ -155,9 +157,35 @@ describe('/v1/wallet/bitcoin/:blockchain error codes over HTTP', () => {
       expect(response.status).toBe(400);
       expect(response.body).toMatchObject({ statusCode: 400, code: 'BadRequest' });
     });
+
+    // JSON null is a wrong JSON type, not an absent field: it must not fall back to the default or count as "not given".
+    it.each<[string, Record<string, unknown>]>([
+      ['feeRate null next to feeRateSatPerVb', { feeRate: null }],
+      ['feeRateSatPerVb null next to feeRate', { feeRateSatPerVb: null, feeRate: 'fast' }],
+      ['rbf null', { rbf: null }],
+      ['includeUnconfirmed null', { includeUnconfirmed: null }],
+      ['allowOwnDestination null', { allowOwnDestination: null }],
+    ])('answers 400 BadRequest for %s', async (_case, overrides) => {
+      const response = await call('POST', 'BitcoinRegtest/prepare', prepareBody(overrides));
+      expect(response.status).toBe(400);
+      expect(response.body).toMatchObject({ statusCode: 400, code: 'BadRequest' });
+      expect(Array.isArray((response.body as { message: unknown }).message)).toBe(true);
+    });
   });
 
   describe('POST submit', () => {
+    it.each<[string, Record<string, unknown>]>([
+      ['transactionHex null next to psbt', { transactionHex: null, psbt: 'cHNidP8=' }],
+      ['psbt null next to transactionHex', { transactionHex: '00', psbt: null }],
+      ['transactionHex null alone', { transactionHex: null }],
+      ['psbt null alone', { psbt: null }],
+    ])('answers 400 BadRequest for %s', async (_case, overrides) => {
+      const response = await call('POST', 'BitcoinRegtest/submit', { prepareId: randomUUID(), ...overrides });
+      expect(response.status).toBe(400);
+      expect(response.body).toMatchObject({ statusCode: 400, code: 'BadRequest' });
+      expect(Array.isArray((response.body as { message: unknown }).message)).toBe(true);
+    });
+
     it.each(['x', 'not-a-uuid', `${randomUUID()}0`])('answers 404 PrepareNotFound for prepareId "%s"', async (id) => {
       await expect(call('POST', 'BitcoinRegtest/submit', { prepareId: id, transactionHex: '00' })).resolves.toEqual({
         status: 404,

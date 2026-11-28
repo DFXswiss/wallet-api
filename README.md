@@ -169,7 +169,9 @@ lower case. All amounts are integer sats.
 Errors have the shape `{ statusCode, code, message }`. For the codes listed below, `message` repeats `code`. The
 request body is checked in two steps. First, the JSON types: a missing required field, or a field of the wrong JSON
 type (for example a number for `amount`, a string for `historyLimit`, or a non-string entry in `addresses`), answers
-400 `BadRequest`, and `message` is then an array of validation messages. Second, the service checks count, format, and
+400 `BadRequest`, and `message` is then an array of validation messages. An optional field may be left out, but JSON
+`null` is a wrong JSON type on every field, optional ones included: `null` never means "not given" or "use the
+default" and also answers 400 `BadRequest`. Second, the service checks count, format, and
 range and answers the documented codes below, also over HTTP. Unknown fields are dropped. A request body larger than
 1 MB is refused before both steps with 413 `PayloadTooLarge`; every size limit documented below fits within 1 MB.
 
@@ -192,7 +194,7 @@ bech32 address in upper and lower case) are merged. Response 200:
 
 Errors:
 
-- 400 `BadRequest`: `addresses` missing or not an array of strings; `historyLimit` not a number.
+- 400 `BadRequest`: `addresses` missing or not an array of strings; `historyLimit` not a number (including `null`).
 - 400 `AddressInvalid`: no address, more than 50, or one that is not P2WPKH on the network (including a wrong length).
 - 400 `HistoryLimitInvalid`: `historyLimit` not an integer from 1 to 100 (for example `0`, `101`, `1.5`).
 - 404 `EsploraNotConfigured`: unknown or unconfigured `:blockchain`.
@@ -242,7 +244,8 @@ Errors:
 
 - 400 `BadRequest`: a required field missing or of the wrong JSON type (`addresses` not an array of strings;
   `changeAddress`, `destination`, or `amount` not a string; `feeRate` not a string; `feeRateSatPerVb` not a number;
-  `rbf`, `includeUnconfirmed`, or `allowOwnDestination` not a boolean).
+  `rbf`, `includeUnconfirmed`, or `allowOwnDestination` not a boolean). An optional field sent as `null` is of the
+  wrong JSON type too.
 - 400 `AddressInvalid`: `addresses` empty, more than 50, or with an entry that is not P2WPKH on the network; a
   `changeAddress` that is not P2WPKH on the network.
 - 400 `DestinationInvalid`: `destination` is no address of a supported type (including a wrong length).
@@ -285,7 +288,8 @@ after it expired even without further requests. After that, its `prepareId` answ
 
 Errors:
 
-- 400 `BadRequest`: `prepareId` missing or not a string; `transactionHex` or `psbt` not a string.
+- 400 `BadRequest`: `prepareId` missing or not a string; `transactionHex` or `psbt` present but not a string
+  (including `null`).
 - 400 `SubmitPayloadInvalid`: none or both of `transactionHex` and `psbt`.
 - 400 `TransactionInvalid`: the hex or PSBT cannot be decoded, is too large (`transactionHex` over 800,000
   characters, `psbt` over 1,000,000 characters, or a transaction over 400,000 bytes), or is no valid transaction.

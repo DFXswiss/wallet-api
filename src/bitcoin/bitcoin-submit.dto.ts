@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString } from 'class-validator';
+import { IsString } from 'class-validator';
+import { IsAbsentOr } from '../common/is-absent-or.decorator';
 
 // The decorators check only JSON type and presence (400 `BadRequest`). Format and size are checked by BitcoinService,
 // which answers the documented codes (`PrepareNotFound`, `SubmitPayloadInvalid`, `TransactionInvalid`, ...).
@@ -9,12 +10,12 @@ export class BitcoinSubmitRequestDto {
   prepareId: string;
 
   @ApiPropertyOptional({ description: 'Signed transaction, hex. Exactly one of `transactionHex` and `psbt`.' })
-  @IsOptional()
+  @IsAbsentOr()
   @IsString()
   transactionHex?: string;
 
   @ApiPropertyOptional({ description: 'Signed (finalized or not) PSBT, base64.' })
-  @IsOptional()
+  @IsAbsentOr()
   @IsString()
   psbt?: string;
 }

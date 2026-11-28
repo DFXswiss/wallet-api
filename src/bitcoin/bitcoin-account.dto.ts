@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsArray, IsNumber, IsOptional, IsString } from 'class-validator';
+import { IsArray, IsNumber, IsString } from 'class-validator';
+import { IsAbsentOr } from '../common/is-absent-or.decorator';
 import { DEFAULT_HISTORY_LIMIT, MAX_HISTORY_LIMIT } from './account-view';
 import { MAX_WALLET_ADDRESSES } from './bitcoin-limits';
 
@@ -17,7 +18,7 @@ export class BitcoinAccountRequestDto {
   addresses: string[];
 
   @ApiPropertyOptional({ minimum: 1, maximum: MAX_HISTORY_LIMIT, default: DEFAULT_HISTORY_LIMIT, type: 'integer' })
-  @IsOptional()
+  @IsAbsentOr()
   @IsNumber()
   historyLimit?: number;
 }

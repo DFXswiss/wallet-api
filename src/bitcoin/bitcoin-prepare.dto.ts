@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsArray, IsBoolean, IsNumber, IsOptional, IsString } from 'class-validator';
+import { IsArray, IsBoolean, IsNumber, IsString } from 'class-validator';
+import { IsAbsentOr } from '../common/is-absent-or.decorator';
 import { FEE_RATE_CHOICES, FeeRateChoice, MAX_FEE_RATE_SAT_PER_VB } from './fee-estimates';
 import { MAX_WALLET_ADDRESSES } from './bitcoin-limits';
 
@@ -36,7 +37,7 @@ export class BitcoinPrepareRequestDto {
   amount: string;
 
   @ApiPropertyOptional({ enum: [...FEE_RATE_CHOICES], description: 'Exactly one of `feeRate` and `feeRateSatPerVb`.' })
-  @IsOptional()
+  @IsAbsentOr()
   @IsString()
   feeRate?: FeeRateChoice;
 
@@ -46,17 +47,17 @@ export class BitcoinPrepareRequestDto {
     type: 'integer',
     description: 'Integer sat/vB.',
   })
-  @IsOptional()
+  @IsAbsentOr()
   @IsNumber()
   feeRateSatPerVb?: number;
 
   @ApiPropertyOptional({ default: true, description: 'Signal BIP-125 replace-by-fee (sequence 0xfffffffd).' })
-  @IsOptional()
+  @IsAbsentOr()
   @IsBoolean()
   rbf?: boolean;
 
   @ApiPropertyOptional({ default: false, description: 'Also spend unconfirmed UTXOs.' })
-  @IsOptional()
+  @IsAbsentOr()
   @IsBoolean()
   includeUnconfirmed?: boolean;
 
@@ -64,7 +65,7 @@ export class BitcoinPrepareRequestDto {
     default: false,
     description: 'Allow a destination that is one of `addresses` or `changeAddress`.',
   })
-  @IsOptional()
+  @IsAbsentOr()
   @IsBoolean()
   allowOwnDestination?: boolean;
 }
