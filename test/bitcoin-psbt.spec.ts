@@ -167,9 +167,14 @@ describe('P2WPKH signature shape', () => {
     const other = Buffer.from(publicKey(3));
     expect(check(withWitnesses(raw, [[witnesses[0][0], other], witnesses[1]]))).toBe(false);
     // Swapped keys: each is a valid wallet key, but not the key of the input it signs.
-    expect(check(withWitnesses(raw, [[witnesses[0][0], witnesses[1][1]], [witnesses[1][0], witnesses[0][1]]]))).toBe(
-      false,
-    );
+    expect(
+      check(
+        withWitnesses(raw, [
+          [witnesses[0][0], witnesses[1][1]],
+          [witnesses[1][0], witnesses[0][1]],
+        ]),
+      ),
+    ).toBe(false);
     const badPrefix = Buffer.from(witnesses[0][1]);
     badPrefix[0] = 0x04;
     expect(check(withWitnesses(raw, [[witnesses[0][0], badPrefix], witnesses[1]]))).toBe(false);
