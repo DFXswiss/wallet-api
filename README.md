@@ -128,6 +128,111 @@ with 429 `ChallengeRateLimited`, and anonymous ceremonies cannot fill the revoca
 are deleted, and a further row is refused with 429 `DiagnosticRateLimited` once 500 remain. An EVM JSON-RPC batch of
 more than 16 calls is refused before any upstream request.
 
+## Browser access (CORS)
+
+Browsers on the app origin call this API through the DFX API host. CORS allows exactly one origin per environment and
+no other:
+
+- `prd`: `https://app.dfx.swiss`
+- `stg`: `https://stg.app.dfx.swiss`
+- `dev`: `https://dev.app.dfx.swiss`
+- `loc`: `http://localhost:3000` and `PASSKEY_ORIGIN` when it is a bare origin
+
+Allowed methods are `GET`, `POST`, and `PUT`; allowed request headers are `Authorization` and `Content-Type`.
+Credentials are not allowed: the wallet session travels in the `Authorization` header. Preflight answers are cached for
+600 seconds. A request from another origin receives no `Access-Control-Allow-Origin` header.
+
+## Bitcoin on-chain
+
+This service prepares Bitcoin payments; the device signs them. The device derives its BIP-84 addresses (P2WPKH), sends
+them with each request, signs the returned PSBT with the key of each input's address, and returns the signed payment.
+Seeds and private keys never reach this service.
+
+Every route is `/v1/wallet/bitcoin/:blockchain/...` and requires a wallet session (`Authorization: Bearer <token>`).
+`:blockchain` is `Bitcoin`, `BitcoinTestnet4`, or `BitcoinRegtest`, and only when its Esplora upstream is configured:
+`ESPLORA_BASE_URLS` for the first two, `ESPLORA_REGTEST_URL` for regtest, which is never available on `prd`. Any other
+or unconfigured id answers 404 `EsploraNotConfigured`, like the Esplora proxy. Wallet addresses must be P2WPKH on that
+network (`bc1q`, `tb1q`, `bcrt1q`); bech32 addresses are accepted in all lower or all upper case and are returned in
+lower case. All amounts are integer sats. Errors have the shape `{ statusCode, code, message }`.
+
+### `POST account`
+
+Request: `{ "addresses": string[1..50], "historyLimit"?: 1..100 }` (default 50). Response 200:
+
+- `balance`: `{ confirmed, unconfirmed, total }`. `unconfirmed` is negative while a spend is in the mempool.
+- `addresses[]`: `{ address, confirmed, unconfirmed, total, txCount, used }`. Gap-limit discovery stays on the device:
+  it derives the next batch until it sees 20 consecutive addresses with `used: false`.
+- `utxos[]`: `{ txid, vout, value, address, confirmed, height, confirmations }`.
+- `history[]`: `{ txid, confirmed, height, time, confirmations, netAmount, fee, direction }`, unconfirmed first, then
+  newest first. `netAmount` is what the given addresses received minus what they spent, so an outgoing payment
+  includes its fee. `direction` is `incoming`, `outgoing`, or `self`. `fee` is the whole transaction fee.
+- `tipHeight`, `historyLimit`, and `historyComplete`. History is bounded, not paginated: it holds each address's first
+  Esplora page (25 confirmed plus the unconfirmed transactions), merged and cut at `historyLimit`. `historyComplete` is
+  `false` when older transactions exist.
+
+Errors: 400 `AddressInvalid`, 400 `HistoryLimitInvalid`, 502 `OutboundRequestFailed`.
+
+### `GET fees`
+
+Response 200: `{ blockchain, source, unit: "sat/vB", rates: { fast, normal, slow } }`. Rates are integers taken from
+Esplora `fee-estimates` for the targets 1, 6, and 144 blocks (the next target above, or the largest present), rounded
+up after dropping fractions up to 0.05 sat/vB, at least 1, and with `fast >= normal >= slow`.
+
+When Esplora answers with no estimate (regtest usually answers `{}`), `BitcoinTestnet4` and `BitcoinRegtest` use the
+fallback `{ fast: 3, normal: 2, slow: 1 }` with `source: "fallback"`, outside `prd` only. `Bitcoin` has no fallback in any
+environment and nothing has one on `prd`: those answer 503 `FeeEstimatesUnavailable`.
+
+### `POST prepare`
+
+Request:
+
+- `addresses`: the wallet addresses whose UTXOs may be spent, 1 to 50.
+- `changeAddress`: a P2WPKH address on the network.
+- `destination`: a P2PKH, P2SH, P2WPKH, P2WSH, or P2TR address on the network.
+- `amount`: integer sats as a decimal string, or `"max"`.
+- Exactly one of `feeRate` (`fast`, `normal`, `slow`) and `feeRateSatPerVb` (integer 1 to 1000).
+- `rbf` (default `true`): BIP-125 sequence `0xfffffffd`; `false` uses `0xffffffff`.
+- `includeUnconfirmed` (default `false`): also spend unconfirmed UTXOs.
+- `allowOwnDestination` (default `false`): allow a destination that is one of `addresses` or `changeAddress`.
+
+Selection is deterministic largest-first. UTXOs worth no more than the cost of spending them (68 vB times the fee rate)
+are left out and counted in `uneconomicalUtxos`. Change is created only when it is at least 294 sats; a smaller
+remainder goes to the fee and is reported in `changeAddedToFee`. The change output's position is random. `"max"` spends
+every spendable UTXO into one output without change. A transaction has at most 200 inputs. `vsize` is an upper
+estimate for the signed transaction.
+
+Response 201: `{ prepareId, expiresAt, blockchain, psbt, txid, destination, amount, fee, feeRate, change,
+changeAddress, changeAddedToFee, vsize, rbf, totalInput, uneconomicalUtxos, inputs[], outputs[] }`. `psbt` is an
+unsigned BIP-174 PSBT in base64, version 2, lock time 0; every input carries `witnessUtxo` and no BIP-32 derivation.
+`inputs[]` are `{ txid, vout, value, address }` in transaction order; the device signs input `i` with the key of
+`inputs[i].address`. `outputs[]` are `{ address, value, kind }` in transaction order, `kind` being `destination` or
+`change`. The prepared payment can be submitted for 10 minutes.
+
+Errors: 400 `AddressInvalid`, `DestinationInvalid`, `DestinationWrongNetwork`, `AmountInvalid`,
+`FeeRateChoiceInvalid`; 422 `DestinationIsOwnAddress`, `InsufficientFunds`, `AmountBelowDust` (below the
+destination's dust threshold: 546 P2PKH, 540 P2SH, 294 P2WPKH, 330 P2WSH and P2TR), `FeeExceedsAmount`,
+`TooManyInputs`; 429 `PrepareRateLimited` (20 unexpired, unsubmitted prepared payments per wallet); 502
+`OutboundRequestFailed`; 503 `FeeEstimatesUnavailable`.
+
+### `POST submit`
+
+Request: `{ "prepareId": uuid }` and exactly one of `transactionHex` (the signed transaction) and `psbt` (the signed
+PSBT in base64, finalized or not; this service finalizes it, which needs no key).
+
+The signed transaction must have the prepared `txid`. P2WPKH signatures sit in the witness, which the txid does not
+cover, so the txid is equal exactly when the transaction spends the prepared inputs to the prepared outputs with the
+prepared sequence, version, and lock time. Every input must carry a P2WPKH witness. The transaction is then broadcast
+through Esplora.
+
+Response 200: `{ txid, prepareId, alreadySubmitted }`. Repeating a submit of the same transaction answers the same
+`txid` with `alreadySubmitted: true` and does not broadcast again; so does a first submit when the node already knows
+the transaction. Prepared payments are deleted 24 hours after they expire.
+
+Errors: 400 `SubmitPayloadInvalid`, `TransactionInvalid`, `TransactionNotSigned`; 404 `PrepareNotFound` (also for
+another wallet's or another blockchain's id); 410 `PrepareExpired`; 422 `TransactionMismatch`, `BroadcastRejected`
+(the node refused the transaction; the prepared payment stays submittable until it expires); 502
+`OutboundRequestFailed`.
+
 ## Database
 
 The schema belongs to this service. Run migrations before starting a deployed instance:
