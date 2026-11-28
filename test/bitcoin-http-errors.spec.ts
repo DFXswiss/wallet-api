@@ -1,12 +1,14 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { json } from 'express';
 import { randomUUID } from 'node:crypto';
 import { SessionAccountService } from '../src/auth/session-account.service';
 import { SessionGuard } from '../src/auth/session.guard';
 import { BitcoinFamilyGuard } from '../src/bitcoin/bitcoin-family.guard';
 import { BitcoinController } from '../src/bitcoin/bitcoin.controller';
 import { BitcoinService } from '../src/bitcoin/bitcoin.service';
-import { WalletExceptionFilter } from '../src/common/wallet-exception.filter';
+import { MAX_PSBT_BASE64_LENGTH } from '../src/bitcoin/raw-transaction';
+import { WalletExceptionFilter, walletParserErrorMiddleware } from '../src/common/wallet-exception.filter';
 import { WalletFamilies } from '../src/config/wallet-families';
 import { ACCOUNT, CHANGE, DESTINATION, RECEIVE, fundedRoutes, setup, signedHex } from './bitcoin-service.fixtures';
 import { allFamiliesOn } from './wallet-families.fixtures';
@@ -16,7 +18,7 @@ const VALID_TOKEN = 'valid-session-token';
 const error = (statusCode: number, code: string) => ({ statusCode, code, message: code });
 
 // The /v1/wallet/bitcoin routes over HTTP with the real BitcoinService (fake Esplora, in-memory store) and the same
-// global ValidationPipe and filter as src/main.ts. The DTOs check only JSON type and presence, so the service's own
+// global ValidationPipe, filter, and 1 MB JSON body limit as src/main.ts. The DTOs check only JSON type and presence, so the service's own
 // checks produce the documented error codes.
 describe('/v1/wallet/bitcoin/:blockchain error codes over HTTP', () => {
   let app: INestApplication;
@@ -34,10 +36,13 @@ describe('/v1/wallet/bitcoin/:blockchain error codes over HTTP', () => {
         BitcoinFamilyGuard,
       ],
     }).compile();
-    app = moduleRef.createNestApplication();
+    app = moduleRef.createNestApplication({ bodyParser: false });
+    const filter = new WalletExceptionFilter();
+    app.use(json({ limit: '1mb' }));
+    app.use(walletParserErrorMiddleware(filter));
     app.setGlobalPrefix('v1');
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: false }));
-    app.useGlobalFilters(new WalletExceptionFilter());
+    app.useGlobalFilters(filter);
     await app.listen(0, '127.0.0.1');
     baseUrl = (await app.getUrl()).replace('[::1]', '127.0.0.1');
   });
@@ -171,6 +176,24 @@ describe('/v1/wallet/bitcoin/:blockchain error codes over HTTP', () => {
       await expect(
         call('POST', 'BitcoinRegtest/submit', { prepareId: randomUUID(), transactionHex: 'zz' }),
       ).resolves.toEqual({ status: 400, body: error(400, 'TransactionInvalid') });
+    });
+
+    it('answers 400 TransactionInvalid for a PSBT over the PSBT limit in a body under 1 MB', async () => {
+      const body = { prepareId: randomUUID(), psbt: 'A'.repeat(MAX_PSBT_BASE64_LENGTH + 4) };
+      expect(Buffer.byteLength(JSON.stringify(body))).toBeLessThan(1024 * 1024);
+      await expect(call('POST', 'BitcoinRegtest/submit', body)).resolves.toEqual({
+        status: 400,
+        body: error(400, 'TransactionInvalid'),
+      });
+    });
+
+    it('answers 413 PayloadTooLarge for a body over 1 MB', async () => {
+      const body = { prepareId: randomUUID(), psbt: 'A'.repeat(1024 * 1024) };
+      expect(Buffer.byteLength(JSON.stringify(body))).toBeGreaterThan(1024 * 1024);
+      await expect(call('POST', 'BitcoinRegtest/submit', body)).resolves.toEqual({
+        status: 413,
+        body: error(413, 'PayloadTooLarge'),
+      });
     });
 
     it('prepares and submits end to end, and refuses a 2xx broadcast reply without the txid with 502', async () => {

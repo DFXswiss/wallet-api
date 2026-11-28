@@ -765,7 +765,7 @@ describe('submit', () => {
     const { service, payment } = await prepared();
     expect(
       await walletCodeAsync(() =>
-        service.submit(ACCOUNT, 'BitcoinRegtest', { prepareId: payment.prepareId, psbt: 'A'.repeat(1_200_004) }),
+        service.submit(ACCOUNT, 'BitcoinRegtest', { prepareId: payment.prepareId, psbt: 'A'.repeat(1_000_004) }),
       ),
     ).toEqual({ status: 400, code: 'TransactionInvalid' });
   });

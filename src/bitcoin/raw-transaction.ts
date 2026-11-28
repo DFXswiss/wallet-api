@@ -5,6 +5,13 @@ import { txidFromSerialization } from './psbt-builder';
 /** Upper bound for a submitted transaction: standard transactions are at most 400,000 weight units. */
 export const MAX_RAW_TRANSACTION_BYTES = 400_000;
 
+/**
+ * Upper bound for a submitted PSBT in base64 characters (750,000 decoded bytes). It stays below the 1 MB JSON body
+ * limit of `src/main.ts`, so an oversized PSBT reaches this check and answers 400 `TransactionInvalid` over HTTP; only
+ * bodies over 1 MB are stopped earlier with 413 `PayloadTooLarge`.
+ */
+export const MAX_PSBT_BASE64_LENGTH = 1_000_000;
+
 export type ParsedInput = {
   txid: string;
   vout: number;
@@ -186,7 +193,7 @@ export function parseTransactionHex(hex: string): Buffer {
 export function extractFromPsbt(psbtBase64: string): Buffer {
   if (
     typeof psbtBase64 !== 'string' ||
-    psbtBase64.length > MAX_RAW_TRANSACTION_BYTES * 3 ||
+    psbtBase64.length > MAX_PSBT_BASE64_LENGTH ||
     !/^[A-Za-z0-9+/]+={0,2}$/.test(psbtBase64)
   ) {
     throw walletError(400, 'TransactionInvalid');

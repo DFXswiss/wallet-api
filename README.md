@@ -170,7 +170,8 @@ Errors have the shape `{ statusCode, code, message }`. For the codes listed belo
 request body is checked in two steps. First, the JSON types: a missing required field, or a field of the wrong JSON
 type (for example a number for `amount`, a string for `historyLimit`, or a non-string entry in `addresses`), answers
 400 `BadRequest`, and `message` is then an array of validation messages. Second, the service checks count, format, and
-range and answers the documented codes below, also over HTTP. Unknown fields are dropped.
+range and answers the documented codes below, also over HTTP. Unknown fields are dropped. A request body larger than
+1 MB is refused before both steps with 413 `PayloadTooLarge`; every size limit documented below fits within 1 MB.
 
 ### `POST account`
 
@@ -286,13 +287,15 @@ Errors:
 
 - 400 `BadRequest`: `prepareId` missing or not a string; `transactionHex` or `psbt` not a string.
 - 400 `SubmitPayloadInvalid`: none or both of `transactionHex` and `psbt`.
-- 400 `TransactionInvalid`: the hex or PSBT cannot be decoded, is too large, or is no valid transaction.
+- 400 `TransactionInvalid`: the hex or PSBT cannot be decoded, is too large (`transactionHex` over 800,000
+  characters, `psbt` over 1,000,000 characters, or a transaction over 400,000 bytes), or is no valid transaction.
 - 400 `TransactionNotSigned`: an input is no complete P2WPKH spend of the prepared input (no witness, a witness not of
   two items, an empty or longer than 73-byte signature, a public key that is not compressed or not the key of the
   prepared input's address), also on a repeat after a successful submit; or the PSBT cannot be finalized.
 - 404 `EsploraNotConfigured`: unknown or unconfigured `:blockchain`.
 - 404 `PrepareNotFound`: `prepareId` is not a UUID, unknown, deleted, or another wallet's or another blockchain's id.
 - 410 `PrepareExpired`.
+- 413 `PayloadTooLarge`: request body larger than 1 MB.
 - 422 `TransactionMismatch`: the transaction's txid differs from the prepared one.
 - 422 `BroadcastRejected`: the node refused the transaction; the prepared payment stays submittable until it expires.
 - 502 `OutboundRequestFailed`: Esplora failed, or answered 2xx without exactly the prepared txid; the prepared payment
